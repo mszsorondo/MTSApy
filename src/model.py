@@ -75,14 +75,25 @@ class CompositionAnalyzer:
 
         self._no_indices_alphabet = list(set([self.remove_indices(str(e)) for e in composition._alphabet]))
         self._no_indices_alphabet.sort()
-        breakpoint()
-        print(self._no_indices_alphabet)
+        self._fast_no_indices_alphabet_dict = dict()
+        for i in range(len(self._no_indices_alphabet)): self._fast_no_indices_alphabet_dict[self._no_indices_alphabet[i]]=i
+        self._fast_no_indices_alphabet_dict = bidict(self._fast_no_indices_alphabet_dict)
+        self._feature_methods = [self.event_label_feature,self.state_label_feature,self.controllable
+            ,self.marked_state, self.current_phase,self.child_node_state]
 
+
+    def test_features_on_transition(self, transition):
+        [compute_feature(transition) for compute_feature in self._feature_methods]
     def event_label_feature(self, transition):
         """
         Determines the label of ℓ in A E p .
         """
-        raise NotImplementedError
+        feature_vec_slice = [0 for _ in self._no_indices_alphabet]
+        no_idx_label = self.remove_indices(transition.action.toString())
+        feature_vec_slice_pos = self._fast_no_indices_alphabet_dict[no_idx_label]
+        feature_vec_slice[feature_vec_slice_pos] = 1
+        breakpoint()
+        return feature_vec_slice
     def state_label_feature(self, transition):
         """
         Determines the labels of the explored
@@ -96,7 +107,7 @@ class CompositionAnalyzer:
         """Whether s and s ′ ∈ M E p ."""
         raise NotImplementedError
 
-    def current_phase(self):
+    def current_phase(self, transition):
         raise NotImplementedError
 
     def child_node_state(self, transition):
@@ -127,11 +138,7 @@ if __name__ == "__main__":
     d.expand(0)
     d.expand(0)
     d.expand(0)
-    pos = nx.spring_layout(d)
-    nx.draw(d, with_labels=True, arrows=True)
 
-    edge_controllability = nx.get_edge_attributes(d, 'controllability')
-    nx.draw_networkx_edge_labels(d, pos, edge_labels=edge_controllability)
+    da.test_features_on_transition(d.getFrontier()[1])
 
-    plt.savefig("graph.png")
 
