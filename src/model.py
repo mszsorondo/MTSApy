@@ -52,6 +52,18 @@ class CompositionGraph(nx.DiGraph):
     def _check_no_repeated_states(self):
         raise NotImplementedError
 
+    def explored(self, transition):
+        """
+        Whether a transition from s or s ′ has
+            already been explored.
+
+        """
+        raise NotImplementedError
+    def last_expanded(self, transition):
+        """Whether s is the last expanded state in h
+            (outgoing or incoming)."""
+        raise NotImplementedError
+
     def finished(self):
         return self._javaEnv.isFinished()
 class CompositionAnalyzer:
