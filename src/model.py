@@ -89,20 +89,26 @@ class CompositionAnalyzer:
         Determines the label of ℓ in A E p .
         """
         feature_vec_slice = [0 for _ in self._no_indices_alphabet]
-        no_idx_label = self.remove_indices(transition.action.toString())
+        self._set_transition_type_bit(feature_vec_slice, transition.action)
+        #print(no_idx_label, feature_vec_slice)
+        return feature_vec_slice
+
+    def _set_transition_type_bit(self, feature_vec_slice, transition):
+        no_idx_label = self.remove_indices(transition.toString())
         feature_vec_slice_pos = self._fast_no_indices_alphabet_dict[no_idx_label]
         feature_vec_slice[feature_vec_slice_pos] = 1
-        breakpoint()
-        return feature_vec_slice
+
     def state_label_feature(self, transition):
         """
         Determines the labels of the explored
             transitions that arrive at s.
         """
-        raise NotImplementedError
+        feature_vec_slice = [0 for _ in self._no_indices_alphabet]
+        arriving_to_s = transition.state.getParents()
+        for trans in arriving_to_s: self._set_transition_type_bit(feature_vec_slice,trans.getFirst())
+        return feature_vec_slice
     def controllable(self, transition):
-        raise NotImplementedError
-
+        return [int(transition.action.isControllable())]
     def marked_state(self, transition):
         """Whether s and s ′ ∈ M E p ."""
         raise NotImplementedError
@@ -138,7 +144,6 @@ if __name__ == "__main__":
     d.expand(0)
     d.expand(0)
     d.expand(0)
-
-    da.test_features_on_transition(d.getFrontier()[1])
-
+    asd = da.composition.edges()
+    print([da.controllable(trans) for trans in d.getFrontier()])
 
