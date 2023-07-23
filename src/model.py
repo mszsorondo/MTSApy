@@ -83,7 +83,8 @@ class CompositionAnalyzer:
         for i in range(len(self._no_indices_alphabet)): self._fast_no_indices_alphabet_dict[self._no_indices_alphabet[i]]=i
         self._fast_no_indices_alphabet_dict = bidict(self._fast_no_indices_alphabet_dict)
         self._feature_methods = [self.event_label_feature,self.state_label_feature,self.controllable
-            ,self.marked_state, self.current_phase,self.child_node_state]
+                                ,self.marked_state, self.current_phase,self.child_node_state,
+                                 self.uncontrollable_neighborhood, self.explored_state_child, self.isLastExpanded]
 
 
     def test_features_on_transition(self, transition):
@@ -93,6 +94,8 @@ class CompositionAnalyzer:
         Determines the label of ℓ in A E p .
         """
         feature_vec_slice = [0 for _ in self._no_indices_alphabet]
+        breakpoint()
+
         self._set_transition_type_bit(feature_vec_slice, transition.action)
         #print(no_idx_label, feature_vec_slice)
         return feature_vec_slice
@@ -160,7 +163,13 @@ class CompositionAnalyzer:
             if not c.isdigit(): res += c
 
         return res
-
+    def compute_features(self, transition):
+        res = []
+        breakpoint()
+        for feature_method in self._feature_methods:
+            breakpoint()
+            res += feature_method(transition)
+        return res
 
 
 if __name__ == "__main__":
@@ -172,9 +181,7 @@ if __name__ == "__main__":
     i = 100
     while(i):
         d.expand(0)
-        print(sum([sum(da.isLastExpanded(trans)) for trans in d.edges()]))
-        print(len(d.getFrontier()))
-        print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        [(da.compute_features(trans)) for trans in d._frontier]
         i-=1
 
 
