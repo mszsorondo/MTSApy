@@ -1,3 +1,5 @@
+import warnings
+
 import networkx as nx
 
 from util import *
@@ -14,6 +16,8 @@ class CompositionGraph(nx.DiGraph):
         self._javaEnv = None
         self._alphabet = []
         self._no_indices_alphabet = []
+        self._number_of_goals = 0
+
     def start_composition(self, mtsa_version_path = 'mtsa.jar'):
         assert(self._initial_state is None)
         print("Warning: underlying Java code runs unused feature computations and buffers")
@@ -111,19 +115,43 @@ class CompositionAnalyzer:
         return [int(transition.action.isControllable())]
     def marked_state(self, transition):
         """Whether s and s ′ ∈ M E p ."""
-        raise NotImplementedError
+        return [int(transition.childMarked)]
 
     def current_phase(self, transition):
-        raise NotImplementedError
+        return [int(self.composition._javaEnv.dcs.heuristic.goals_found > 0),
+                int(self.composition._javaEnv.dcs.heuristic.marked_states_found > 0),
+                int(self.composition._javaEnv.dcs.heuristic.closed_potentially_winning_loops > 0)]
+
+
 
     def child_node_state(self, transition):
         """Whether
         s ′ is winning, losing, none,
         or not yet
         explored."""
-        raise NotImplementedError
+        res = [0, 0, 0]
+        if(transition.child is not None):
+            res = [int(transition.child.status.toString()=="GOAL"),
+                   int(transition.child.status.toString()=="ERROR"),
+                   int(transition.child.status.toString()=="NONE")]
+        return res
+    def uncontrollable_neighborhood(self, transition):
+        warnings.warn("Chequear que este bien")
+        breakpoint()
+        return [int(transition.state.uncontrollableUnexploredTransitions>0),
+                int(transition.state.uncontrollableTransitions>0),
+                int(transition.child is None or transition.child.uncontrollableUnexploredTransitions > 0),
+                int(transition.child is None or transition.child.uncontrollableTransitions > 0)
+                ]
 
+    def explored_state_child(self, transition):
+        breakpoint()
+        return [int(len(self.composition.out_edges(transition.state))!= transition.state.unexploredTransitions),
+                int(transition.child is not None and len(self.composition.out_edges(transition.child))!= transition.state.unexploredTransitions)]
 
+    def isLastExpanded(self, transition):
+        warnings.warn("For some reason, sometimes no edge in the entire graph was the las one expanded!")
+        return [int((self.composition.getLastExpanded().state, self.composition.getLastExpanded().child)==(transition[0],transition[1]))]
 
     def remove_indices(self, transition_label : str):
         res = ""
@@ -136,14 +164,18 @@ class CompositionAnalyzer:
 
 
 if __name__ == "__main__":
-    d = CompositionGraph("AT", 2, 2)
+    d = CompositionGraph("AT", 3, 3)
 
     d.start_composition()
     da = CompositionAnalyzer(d)
 
-    d.expand(0)
-    d.expand(0)
-    d.expand(0)
-    asd = da.composition.edges()
-    print([da.controllable(trans) for trans in d.getFrontier()])
+    i = 100
+    while(i):
+        d.expand(0)
+        print(sum([sum(da.isLastExpanded(trans)) for trans in d.edges()]))
+        print(len(d.getFrontier()))
+        print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        i-=1
+
+
 
