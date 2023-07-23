@@ -5,3 +5,4 @@ import matplotlib.pyplot as plt
 from bidict import bidict
 
 FSP_PATH = "./fsp"
+BENCHMARK_PROBLEMS = ["AT", "BW", "CM", "DP","TA","TL"]

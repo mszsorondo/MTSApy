@@ -5,6 +5,8 @@ import networkx as nx
 from util import *
 
 
+
+
 class CompositionGraph(nx.DiGraph):
     def __init__(self, problem, n, k):
         super().__init__()
@@ -17,6 +19,7 @@ class CompositionGraph(nx.DiGraph):
         self._alphabet = []
         self._no_indices_alphabet = []
         self._number_of_goals = 0
+        self._expansion_order = []
 
     def start_composition(self, mtsa_version_path = 'mtsa.jar'):
         assert(self._initial_state is None)
@@ -39,13 +42,14 @@ class CompositionGraph(nx.DiGraph):
 
 
     def expand(self, idx):
-        assert (idx<len(self.getFrontier()) and idx>=0), "invalid index"
+        assert(not self._javaEnv.isFinished()), "Invalid expansion, composition is already solved"
+        assert (idx<len(self.getFrontier()) and idx>=0), "Invalid index"
         self._javaEnv.expandAction(idx)
         new_state_action = self.getLastExpanded()
         controllability, label = self.getLastExpanded().action.isControllable(), self.getLastExpanded().action.toString()
         self.add_node(self.last_expansion_child_state())
-        self.add_edge(new_state_action.state, self.last_expansion_child_state(), controllability=controllability, label=label)
-
+        self.add_edge(new_state_action.state, self.last_expansion_child_state(), controllability=controllability, label=label, action_with_features = new_state_action)
+        self._expansion_order.append(self.getLastExpanded())
     def last_expansion_child_state(self):
         return self._javaEnv.heuristic.lastExpandedTo
     def last_expansion_source_state(self):
@@ -94,8 +98,6 @@ class CompositionAnalyzer:
         Determines the label of ℓ in A E p .
         """
         feature_vec_slice = [0 for _ in self._no_indices_alphabet]
-        breakpoint()
-
         self._set_transition_type_bit(feature_vec_slice, transition.action)
         #print(no_idx_label, feature_vec_slice)
         return feature_vec_slice
@@ -140,7 +142,6 @@ class CompositionAnalyzer:
         return res
     def uncontrollable_neighborhood(self, transition):
         warnings.warn("Chequear que este bien")
-        breakpoint()
         return [int(transition.state.uncontrollableUnexploredTransitions>0),
                 int(transition.state.uncontrollableTransitions>0),
                 int(transition.child is None or transition.child.uncontrollableUnexploredTransitions > 0),
@@ -148,13 +149,12 @@ class CompositionAnalyzer:
                 ]
 
     def explored_state_child(self, transition):
-        breakpoint()
         return [int(len(self.composition.out_edges(transition.state))!= transition.state.unexploredTransitions),
                 int(transition.child is not None and len(self.composition.out_edges(transition.child))!= transition.state.unexploredTransitions)]
 
     def isLastExpanded(self, transition):
         warnings.warn("For some reason, sometimes no edge in the entire graph was the las one expanded!")
-        return [int((self.composition.getLastExpanded().state, self.composition.getLastExpanded().child)==(transition[0],transition[1]))]
+        return [int(self.composition.getLastExpanded()==transition)]
 
     def remove_indices(self, transition_label : str):
         res = ""
@@ -165,9 +165,7 @@ class CompositionAnalyzer:
         return res
     def compute_features(self, transition):
         res = []
-        breakpoint()
         for feature_method in self._feature_methods:
-            breakpoint()
             res += feature_method(transition)
         return res
 
@@ -177,12 +175,19 @@ if __name__ == "__main__":
 
     d.start_composition()
     da = CompositionAnalyzer(d)
-
+    k = 0
     i = 100
-    while(i):
+    while(i and not d._javaEnv.isFinished()):
         d.expand(0)
-        [(da.compute_features(trans)) for trans in d._frontier]
-        i-=1
+        [(da.compute_features(trans)) for trans in d.getFrontier()]
+        assert(d._expansion_order[-1] in [e[2]["action_with_features"] for e in d.edges(data=True)])
+
+        #k+=sum([sum(da.isLastExpanded(trans[2]["action_with_features"])) for trans in d.edges(data=True)])
+        #i-=1
+
+
+    breakpoint()
+    print(k)
 
 
 
