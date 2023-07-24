@@ -34,7 +34,7 @@ class CompositionGraphTests:
                 i = self.max_num_expansions
                 while (i and not d._javaEnv.isFinished()):
                     d.expand(0)
-                    [(da.compute_features(trans)) for trans in d.getFrontier()]
+                    frontier_features = [(da.compute_features(trans)) for trans in d.getFrontier()]
                     assert (d._expansion_order[-1] in [e[2]["action_with_features"] for e in d.edges(data=True)]), "Last expansion was not added to the composition graph."
                     i-=1
 
