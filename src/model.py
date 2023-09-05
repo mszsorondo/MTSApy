@@ -38,6 +38,7 @@ class CompositionGraph(nx.DiGraph):
         self.add_node(self._initial_state)
         self._alphabet = [e for e in self._javaEnv.dcs.alphabet.actions]
         self._alphabet.sort()
+        return self
 
 
 
@@ -92,7 +93,9 @@ class CompositionAnalyzer:
 
 
     def test_features_on_transition(self, transition):
-        [compute_feature(transition) for compute_feature in self._feature_methods]
+        res = []
+        for compute_feature in self._feature_methods: res.extend(compute_feature(transition))
+        return [float(e) for e in res]
     def event_label_feature(self, transition):
         """
         Determines the label of ℓ in A E p .
@@ -117,15 +120,15 @@ class CompositionAnalyzer:
         for trans in arriving_to_s: self._set_transition_type_bit(feature_vec_slice,trans.getFirst())
         return feature_vec_slice
     def controllable(self, transition):
-        return [int(transition.action.isControllable())]
+        return [float(transition.action.isControllable())]
     def marked_state(self, transition):
         """Whether s and s ′ ∈ M E p ."""
-        return [int(transition.childMarked)]
+        return [float(transition.childMarked)]
 
     def current_phase(self, transition):
-        return [int(self.composition._javaEnv.dcs.heuristic.goals_found > 0),
-                int(self.composition._javaEnv.dcs.heuristic.marked_states_found > 0),
-                int(self.composition._javaEnv.dcs.heuristic.closed_potentially_winning_loops > 0)]
+        return [float(self.composition._javaEnv.dcs.heuristic.goals_found > 0),
+                float(self.composition._javaEnv.dcs.heuristic.marked_states_found > 0),
+                float(self.composition._javaEnv.dcs.heuristic.closed_potentially_winning_loops > 0)]
 
 
 
@@ -136,25 +139,24 @@ class CompositionAnalyzer:
         explored."""
         res = [0, 0, 0]
         if(transition.child is not None):
-            res = [int(transition.child.status.toString()=="GOAL"),
-                   int(transition.child.status.toString()=="ERROR"),
-                   int(transition.child.status.toString()=="NONE")]
+            res = [float(transition.child.status.toString()=="GOAL"),
+                   float(transition.child.status.toString()=="ERROR"),
+                   float(transition.child.status.toString()=="NONE")]
         return res
     def uncontrollable_neighborhood(self, transition):
         warnings.warn("Chequear que este bien")
-        return [int(transition.state.uncontrollableUnexploredTransitions>0),
-                int(transition.state.uncontrollableTransitions>0),
-                int(transition.child is None or transition.child.uncontrollableUnexploredTransitions > 0),
-                int(transition.child is None or transition.child.uncontrollableTransitions > 0)
+        return [float(transition.state.uncontrollableUnexploredTransitions>0),
+                float(transition.state.uncontrollableTransitions>0),
+                float(transition.child is None or transition.child.uncontrollableUnexploredTransitions > 0),
+                float(transition.child is None or transition.child.uncontrollableTransitions > 0)
                 ]
 
     def explored_state_child(self, transition):
-        return [int(len(self.composition.out_edges(transition.state))!= transition.state.unexploredTransitions),
-                int(transition.child is not None and len(self.composition.out_edges(transition.child))!= transition.state.unexploredTransitions)]
+        return [float(len(self.composition.out_edges(transition.state))!= transition.state.unexploredTransitions),
+                float(transition.child is not None and len(self.composition.out_edges(transition.child))!= transition.state.unexploredTransitions)]
 
     def isLastExpanded(self, transition):
-        warnings.warn("For some reason, sometimes no edge in the entire graph was the las one expanded!")
-        return [int(self.composition.getLastExpanded()==transition)]
+        return [float(self.composition.getLastExpanded()==transition)]
 
     def remove_indices(self, transition_label : str):
         res = ""
@@ -179,7 +181,7 @@ if __name__ == "__main__":
     i = 100
     while(i and not d._javaEnv.isFinished()):
         d.expand(0)
-        [(da.compute_features(trans)) for trans in d.getFrontier()]
+        print([(da.compute_features(trans)) for trans in d.getFrontier()])
         assert(d._expansion_order[-1] in [e[2]["action_with_features"] for e in d.edges(data=True)])
 
         #k+=sum([sum(da.isLastExpanded(trans[2]["action_with_features"])) for trans in d.edges(data=True)])

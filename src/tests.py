@@ -6,6 +6,7 @@ class CompositionGraphTests:
         self.instances = [(1,1),(1,2),(2,1),(2,2),(2,3)]
         self.max_num_expansions = 100
     def write_benchmark_feature_outputs(self):
+        """Outputs should be the same as original MTSA's featureMaker"""
         for problem in self.problems:
             for ins in self.instances:
                 f = open(f"test_outputs/{problem}_{ins[0]}_{ins[1]}", "w")
