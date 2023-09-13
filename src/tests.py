@@ -1,4 +1,4 @@
-from model import *
+from composition import *
 
 class CompositionGraphTests:
     def __init__(self):
