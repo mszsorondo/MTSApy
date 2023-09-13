@@ -3,10 +3,172 @@ import jpype
 import jpype.imports
 import matplotlib.pyplot as plt
 from bidict import bidict
+import torch
+import numpy as np
 import argparse
 import os
 FSP_PATH = "./fsp"
 BENCHMARK_PROBLEMS = ["AT", "BW", "CM", "DP","TA","TL"]
+
+
+class Model:
+    def __init__(self):
+        pass
+
+    def predict(self, s):
+        raise NotImplementedError()
+
+    def eval_batch(self, obss):
+        raise NotImplementedError()
+
+    def eval(self, s):
+        raise NotImplementedError()
+
+    def best(self, s):
+        raise NotImplementedError()
+
+    def current_loss(self):
+        raise NotImplementedError()
+
+class TorchModel(Model):
+
+    def __init__(self, args, nfeatures, network=None):
+        super().__init__()
+        self.nfeatures = nfeatures
+        self.n, self.k = None, None
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print("Using", self.device, "device")
+        self.model = network
+        print(self.model)
+        print("Learning rate:", args.learning_rate)
+
+        self.loss_fn = torch.nn.MSELoss()
+
+        self.optimizer = torch.optim.SGD(self.model.parameters(),
+                                         lr=args.learning_rate,
+                                         momentum=args.momentum,
+                                         nesterov=args.nesterov,
+                                         weight_decay=args.weight_decay)
+
+        self.has_learned_something = False
+
+        self.losses = []
+
+    def eval_batch(self, ss):
+        return np.array([self.eval(s) for s in ss])
+
+    def eval(self, s):
+        if not self.has_learned_something or s is None:
+            return 0
+        return float(self.predict(s).max())
+
+    def best(self, s):
+        if not self.has_learned_something or s is None:
+            return 0
+        return int(self.predict(s).argmax())
+
+    def predict(self, s):
+        if not self.has_learned_something or s is None:
+            return 0
+        return self.model(torch.tensor(s).to(self.device))
+
+    def single_update(self, s, value):
+        return self.batch_update(np.array([s]), np.array([value]))
+
+    def batch_update(self, ss, values):
+
+        ss = torch.tensor(ss).to(self.device)
+        values = torch.tensor(values, dtype=torch.float, device=self.device).reshape(len(ss), 1)
+
+        self.optimizer.zero_grad()
+        pred = self.model(ss)
+
+        loss = self.loss_fn(pred, values)
+        loss.backward()
+        self.optimizer.step()
+
+        self.losses.append(loss.item())
+        self.has_learned_something = True
+
+    def nfeatures(self):
+        return self.nfeatures
+
+    # should be called only at the end of each episode
+    def current_loss(self):
+        avg_loss = np.mean(self.losses)
+        self.losses = []
+        return avg_loss
+
+class TorchModel(Model):
+
+    def __init__(self, args, nfeatures, network=None):
+        super().__init__()
+        self.nfeatures = nfeatures
+        self.n, self.k = None, None
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print("Using", self.device, "device")
+        self.model = network
+        print(self.model)
+        print("Learning rate:", args.learning_rate)
+
+        self.loss_fn = torch.nn.MSELoss()
+
+        self.optimizer = torch.optim.SGD(self.model.parameters(),
+                                         lr=args.learning_rate,
+                                         momentum=args.momentum,
+                                         nesterov=args.nesterov,
+                                         weight_decay=args.weight_decay)
+
+        self.has_learned_something = False
+
+        self.losses = []
+
+    def eval_batch(self, ss):
+        return np.array([self.eval(s) for s in ss])
+
+    def eval(self, s):
+        if not self.has_learned_something or s is None:
+            return 0
+        return float(self.predict(s).max())
+
+    def best(self, s):
+        if not self.has_learned_something or s is None:
+            return 0
+        return int(self.predict(s).argmax())
+
+    def predict(self, s):
+        if not self.has_learned_something or s is None:
+            return 0
+        return self.model(torch.tensor(s).to(self.device))
+
+    def single_update(self, s, value):
+        return self.batch_update(np.array([s]), np.array([value]))
+
+    def batch_update(self, ss, values):
+
+        ss = torch.tensor(ss).to(self.device)
+        values = torch.tensor(values, dtype=torch.float, device=self.device).reshape(len(ss), 1)
+
+        self.optimizer.zero_grad()
+        pred = self.model(ss)
+
+        loss = self.loss_fn(pred, values)
+        loss.backward()
+        self.optimizer.step()
+
+        self.losses.append(loss.item())
+        self.has_learned_something = True
+
+    def nfeatures(self):
+        return self.nfeatures
+
+    # should be called only at the end of each episode
+    def current_loss(self):
+        avg_loss = np.mean(self.losses)
+        self.losses = []
+        return avg_loss
 
 
 def parse_args():
@@ -136,6 +298,24 @@ def parse_args():
 
     return args
 
+class NeuralNetwork(torch.nn.Module):
+    def __init__(self, nfeatures, nnsize):
+        super(NeuralNetwork, self).__init__()
+        nnsize = list(nnsize)
+        layers = [torch.nn.Linear(nfeatures, nnsize[0])]
+        for i in range(len(nnsize)-1):
+            layers.append(torch.nn.ReLU())
+            layers.append(torch.nn.Linear(nnsize[i], nnsize[i+1]))
+        self.layers = torch.nn.ModuleList(layers)
 
-def default_network():
-    raise NotImplementedError
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+    def reuse_onnx_model(self, onnx_path):
+        raise NotImplementedError
+
+def default_network(self):
+    nn = NeuralNetwork(self.nfeatures, self.args.nn_size).to("cpu")
+

@@ -76,7 +76,9 @@ class CompositionGraph(nx.DiGraph):
     def finished(self):
         return self._javaEnv.isFinished()
 class CompositionAnalyzer:
-    """class used to get Composition information, usable as hand-crafted features"""
+    """class used to get Composition information, usable as hand-crafted features
+        TODO this class will be replaced by object-oriented Feature class
+    """
 
     def __init__(self, composition : CompositionGraph):
         self.composition = composition

@@ -2,13 +2,13 @@ from util import *
 from composition import CompositionGraph
 from agent import *
 
-class ExperimentStats
 class Experiment:
     def __init__(self, args : argparse.Namespace, problem : str):
         self.args = args
         self.problem = problem
         self.results_path = "../experiments/" + args.exp_path + "/" + self.problem + "/"
-
+    def write_info_to_file(self):
+        raise NotImplementedError
 class TrainingExperiment(Experiment):
     def __init__(self, args : argparse.Namespace, problem : str, context : tuple[int,int]):
         super.__init__(args,problem)
@@ -26,7 +26,7 @@ class RLTrainingExperiment(TrainingExperiment):
         #self.reward etc
 
     def init_agent(self, agent):
-        agent = DQNAgent(self.args, save_file=self.results_path, verbose=False, nn_model=default_network()) if agent is not None else agent
+        agent = DQNAgent(self.args, save_file=self.results_path, verbose=False, nn_model=default_network()) if agent is None else agent
         self.write_description()
         return agent
     def compute_step_state(self):
@@ -34,3 +34,7 @@ class RLTrainingExperiment(TrainingExperiment):
 
     def train(self):
         raise NotImplementedError
+
+
+if __name__ == "__main__":
+    exp = RLTrainingExperiment(parse_args(), "AT", (2,2))
