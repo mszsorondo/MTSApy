@@ -6,7 +6,6 @@ from util import *
 
 
 
-
 class CompositionGraph(nx.DiGraph):
     def __init__(self, problem, n, k):
         super().__init__()
@@ -21,6 +20,8 @@ class CompositionGraph(nx.DiGraph):
         self._number_of_goals = 0
         self._expansion_order = []
 
+    def reset_from_copy(self):
+        return self.__class__(self._problem, self._n, self._k).start_composition()
     def start_composition(self, mtsa_version_path = 'mtsa.jar'):
         assert(self._initial_state is None)
         print("Warning: underlying Java code runs unused feature computations and buffers")
@@ -61,15 +62,19 @@ class CompositionGraph(nx.DiGraph):
     def _check_no_repeated_states(self):
         raise NotImplementedError
 
+
     def explored(self, transition):
         """
+        TODO
         Whether a transition from s or s ′ has
             already been explored.
 
         """
         raise NotImplementedError
     def last_expanded(self, transition):
-        """Whether s is the last expanded state in h
+        """
+        TODO
+        Whether s is the last expanded state in h
             (outgoing or incoming)."""
         raise NotImplementedError
 
@@ -167,12 +172,38 @@ class CompositionAnalyzer:
             if not c.isdigit(): res += c
 
         return res
+    def get_transition_features_size(self): return len(self.compute_features(self.composition.getFrontier()[0]))
+
     def compute_features(self, transition):
         res = []
         for feature_method in self._feature_methods:
             res += feature_method(transition)
         return res
 
+class Environment:
+    def __init__(self, contexts : CompositionAnalyzer):
+        """Environment base class.
+            TODO are contexts actually part of the concept of an RL environment?
+            """
+        self.contexts = contexts
+
+    def reset_from_copy(self):
+        self.contexts = [CompositionAnalyzer(context.composition.reset_from_copy()) for context in self.contexts]
+        return self
+
+    def get_number_of_contexts(self):
+        return len(self.contexts)
+    def get_contexts(self):
+        return self.contexts
+    def step(self, action):
+        raise NotImplementedError
+    def reward(self):
+        raise NotImplementedError
+    def state(self):
+        raise NotImplementedError
+    def actions(self):
+        #TODO refactor
+        return self.contexts[0].composition.getFrontier()
 
 if __name__ == "__main__":
     d = CompositionGraph("AT", 3, 3)

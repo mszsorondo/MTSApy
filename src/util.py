@@ -7,6 +7,7 @@ import torch
 import numpy as np
 import argparse
 import os
+import pickle
 FSP_PATH = "./fsp"
 BENCHMARK_PROBLEMS = ["AT", "BW", "CM", "DP","TA","TL"]
 
@@ -316,6 +317,6 @@ class NeuralNetwork(torch.nn.Module):
     def reuse_onnx_model(self, onnx_path):
         raise NotImplementedError
 
-def default_network(self):
-    nn = NeuralNetwork(self.nfeatures, self.args.nn_size).to("cpu")
+def default_network(n_features, nn_size=[20]):
+    return NeuralNetwork(n_features, nn_size).to("cpu")
 
