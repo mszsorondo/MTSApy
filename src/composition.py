@@ -19,12 +19,13 @@ class CompositionGraph(nx.DiGraph):
         self._no_indices_alphabet = []
         self._number_of_goals = 0
         self._expansion_order = []
+        print("Warning: underlying Java code runs unused feature computations and buffers")
+
 
     def reset_from_copy(self):
         return self.__class__(self._problem, self._n, self._k).start_composition()
     def start_composition(self, mtsa_version_path = 'mtsa.jar'):
         assert(self._initial_state is None)
-        print("Warning: underlying Java code runs unused feature computations and buffers")
         if not jpype.isJVMStarted(): jpype.startJVM(classpath=[mtsa_version_path])
         from MTSTools.ac.ic.doc.mtstools.model.operations.DCS.nonblocking import DirectedControllerSynthesisNonBlocking, FeatureBasedExplorationHeuristic, DCSForPython
         from ltsa.dispatcher import TransitionSystemDispatcher
@@ -46,7 +47,7 @@ class CompositionGraph(nx.DiGraph):
     def expand(self, idx):
         assert(not self._javaEnv.isFinished()), "Invalid expansion, composition is already solved"
         assert (idx<len(self.getFrontier()) and idx>=0), "Invalid index"
-        self._javaEnv.expandAction(idx)
+        self._javaEnv.expandAction(idx) #TODO check this is the same index as in the python frontier list
         new_state_action = self.getLastExpanded()
         controllability, label = self.getLastExpanded().action.isControllable(), self.getLastExpanded().action.toString()
         self.add_node(self.last_expansion_child_state())
@@ -181,11 +182,12 @@ class CompositionAnalyzer:
         return res
 
 class Environment:
-    def __init__(self, contexts : CompositionAnalyzer):
+    def __init__(self, contexts : CompositionAnalyzer, normalize_reward : bool = False):
         """Environment base class.
             TODO are contexts actually part of the concept of an RL environment?
             """
         self.contexts = contexts
+        self.normalize_reward = normalize_reward
 
     def reset_from_copy(self):
         self.contexts = [CompositionAnalyzer(context.composition.reset_from_copy()) for context in self.contexts]
@@ -195,15 +197,28 @@ class Environment:
         return len(self.contexts)
     def get_contexts(self):
         return self.contexts
-    def step(self, action):
-        raise NotImplementedError
+    def step(self, action_idx, context_idx = 0):
+        composition_graph = self.contexts[context_idx].composition
+        composition_graph.expand(action_idx) # TODO refactor. Analyzer should not be the expansion medium
+        if not composition_graph._javaEnv.isFinished(): return self.actions(), self.reward(), False, {}
+        else: return None, self.reward(), True, self.get_results()
+    def get_results(self, context_idx = 0):
+        composition_dg = self.contexts[context_idx].composition
+        return {
+            "synthesis time(ms)": float(composition_dg._javaEnv.getSynthesisTime()),
+            "expanded transitions": int(composition_dg._javaEnv.getExpandedTransitions()),
+            "expanded states": int(composition_dg._javaEnv.getExpandedStates())
+        }
+
+
     def reward(self):
-        raise NotImplementedError
+        #TODO ?normalize like Learning-Synthesis?
+        return -1
     def state(self):
         raise NotImplementedError
-    def actions(self):
+    def actions(self, context_idx=0):
         #TODO refactor
-        return self.contexts[0].composition.getFrontier()
+        return self.contexts[context_idx].composition.getFrontier()
 
 if __name__ == "__main__":
     d = CompositionGraph("AT", 3, 3)
@@ -220,8 +235,6 @@ if __name__ == "__main__":
         #k+=sum([sum(da.isLastExpanded(trans[2]["action_with_features"])) for trans in d.edges(data=True)])
         #i-=1
 
-
-    breakpoint()
     print(k)
 
 
