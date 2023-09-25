@@ -200,7 +200,8 @@ class Environment:
     def step(self, action_idx, context_idx = 0):
         composition_graph = self.contexts[context_idx].composition
         composition_graph.expand(action_idx) # TODO refactor. Analyzer should not be the expansion medium
-        if not composition_graph._javaEnv.isFinished(): return self.actions(), self.reward(), False, {}
+        Warning("HERE obs is not actions, but the featurization of the frontier actions")
+        if not composition_graph._javaEnv.isFinished(): return self.frontier_features(), self.reward(), False, {}
         else: return None, self.reward(), True, self.get_results()
     def get_results(self, context_idx = 0):
         composition_dg = self.contexts[context_idx].composition
@@ -219,6 +220,9 @@ class Environment:
     def actions(self, context_idx=0):
         #TODO refactor
         return self.contexts[context_idx].composition.getFrontier()
+    def frontier_features(self):
+        #TODO you can parallelize this
+        return [self.contexts[0].compute_features(trans) for trans in self.contexts[0].getFrontier()]
 
 if __name__ == "__main__":
     d = CompositionGraph("AT", 3, 3)

@@ -7,6 +7,8 @@ import torch
 import numpy as np
 import argparse
 import os, time
+import onnx
+
 import pickle
 FSP_PATH = "./fsp"
 BENCHMARK_PROBLEMS = ["AT", "BW", "CM", "DP","TA","TL"]
@@ -30,76 +32,29 @@ class Model:
 
     def current_loss(self):
         raise NotImplementedError()
-
-class TorchModel(Model):
-
-    def __init__(self, args, nfeatures, network=None):
+class OnnxModel(Model):
+    def __init__(self, model):
         super().__init__()
-        self.nfeatures = nfeatures
-        self.n, self.k = None, None
+        assert model.has_learned_something
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print("Using", self.device, "device")
-        self.model = network
-        print(self.model)
-        print("Learning rate:", args.learning_rate)
+        self.onnx_model, self.session = model.to_onnx()
 
-        self.loss_fn = torch.nn.MSELoss()
+    def save(self, path):
+        onnx.save(self.onnx_model, path + ".onnx")
 
-        self.optimizer = torch.optim.SGD(self.model.parameters(),
-                                         lr=args.learning_rate,
-                                         momentum=args.momentum,
-                                         nesterov=args.nesterov,
-                                         weight_decay=args.weight_decay)
-
-        self.has_learned_something = False
-
-        self.losses = []
+    def predict(self, s):
+        if s is None:
+            return 0
+        return self.session.run(None, {'X': s})[0]
 
     def eval_batch(self, ss):
         return np.array([self.eval(s) for s in ss])
 
     def eval(self, s):
-        if not self.has_learned_something or s is None:
-            return 0
-        return float(self.predict(s).max())
+        return np.max(self.predict(s))
 
-    def best(self, s):
-        if not self.has_learned_something or s is None:
-            return 0
-        return int(self.predict(s).argmax())
-
-    def predict(self, s):
-        if not self.has_learned_something or s is None:
-            return 0
-        return self.model(torch.tensor(s).to(self.device))
-
-    def single_update(self, s, value):
-        return self.batch_update(np.array([s]), np.array([value]))
-
-    def batch_update(self, ss, values):
-
-        ss = torch.tensor(ss).to(self.device)
-        values = torch.tensor(values, dtype=torch.float, device=self.device).reshape(len(ss), 1)
-
-        self.optimizer.zero_grad()
-        pred = self.model(ss)
-
-        loss = self.loss_fn(pred, values)
-        loss.backward()
-        self.optimizer.step()
-
-        self.losses.append(loss.item())
-        self.has_learned_something = True
-
-    def nfeatures(self):
-        return self.nfeatures
-
-    # should be called only at the end of each episode
     def current_loss(self):
-        avg_loss = np.mean(self.losses)
-        self.losses = []
-        return avg_loss
+        raise NotImplementedError()
 
 class TorchModel(Model):
 
@@ -317,6 +272,9 @@ class NeuralNetwork(torch.nn.Module):
     def reuse_onnx_model(self, onnx_path):
         raise NotImplementedError
 
-def default_network(n_features, nn_size=[20]):
-    return NeuralNetwork(n_features, nn_size).to("cpu")
+
+def default_network(args, nfeatures, nn_size=[20]):
+    nn = NeuralNetwork(nfeatures, nn_size).to("cpu")
+    nn_model = TorchModel(args, nfeatures, network=nn)
+    return nn_model
 

@@ -2,7 +2,7 @@ from util import *
 from composition import CompositionGraph, Environment
 from replay_buffer import ReplayBuffer
 import torch
-
+import json
 
 class Feature:
     def __init__(self, str_id):
@@ -46,7 +46,7 @@ class DQNAgent:
         self.converged = False
         self.nfeatures = nfeatures
 
-        if nn_model is None: self.nn_model = default_network(nfeatures) #TODO refactor this line as well
+        if nn_model is None: self.model = default_network(args,nfeatures) #TODO refactor this line as well
 
     def set_model(self, features : list[Feature], context : CompositionGraph, prebuilt = None):
         if prebuilt is not None:
@@ -61,7 +61,8 @@ class DQNAgent:
         states = []
 
         env.reset_from_copy()
-        obs = env.actions()
+        Warning("HERE obs is not actions, but the featurization of the frontier actions")
+        obs = env.frontier_features()
         steps = 0
 
         last_steps = []
@@ -76,7 +77,8 @@ class DQNAgent:
                     states.append((last_steps[j], -len(last_steps) + j, None))
                 last_steps = []
                 env.reset_from_copy()
-                obs = env.actions()
+                Warning("HERE obs is not actions, but the featurization of the frontier actions")
+                obs = env.frontier_features()
             else:
                 if len(last_steps) >= nstep:
                     states.append((last_steps[0], -nstep, obs2))
@@ -100,9 +102,10 @@ class DQNAgent:
     def train(self,seconds=None, max_steps=None, max_eps=None, save_freq=200000, last_obs=None,
               early_stopping=False, save_at_end=False, results_path=None, n_agents_budget=1000):
         assert self.current_training_environment is not None
+        assert self.model is not None
         session = TrainingSession(self, self.current_training_environment, seconds, max_steps, max_eps, save_freq, last_obs,
               early_stopping, save_at_end, results_path, n_agents_budget)
-        if (last_obs is None): self.current_training_environment.reset()
+        if (last_obs is None): self.current_training_environment.reset_from_copy()
 
         obs = self.get_frontier_features() if (last_obs is None) else last_obs
 
@@ -112,15 +115,17 @@ class DQNAgent:
             obs2, reward, done, step_info = self.current_training_environment.step(a)
 
             #TODO refactor with DQN class and DQNExperienceReplay class or decorator with experience replay or similar
+            #also modifying session.last_steps this way looks horrible
             if self.args.exp_replay:
                 if done:
-                    for j in range(len(last_steps)):
-                        self.buffer.add(last_steps[j], -len(last_steps) + j, None)
-                    last_steps = []
+                    for j in range(len(session.last_steps)):
+                        self.buffer.add(session.last_steps[j], -len(session.last_steps) + j, None)
+                    session.last_steps = []
                 else:
-                    if len(last_steps) >= self.args.n_step:
-                        self.buffer.add(last_steps[0], -self.args.n_step, obs2)
-                    last_steps = last_steps[len(last_steps) - self.args.n_step + 1:]
+                    if len(session.last_steps) >= self.args.n_step:
+                        self.buffer.add(session.last_steps[0], -self.args.n_step, obs2)
+                    session.last_steps = session.last_steps[len(session.last_steps) - self.args.n_step + 1:]
+                #TODO how is this? see Learning-Synthesis agent.batch_update
                 self.batch_update()
             else:
                 self.update(obs, a, reward, obs2)
@@ -133,7 +138,7 @@ class DQNAgent:
             if self.training_steps % save_freq == 0 and results_path is not None:
                 self.save(self.current_training_environment.info, path=results_path)
                 n_agents_budget -= 1
-
+            breakpoint()
 
     def set_training_environment(self, env: Environment):
         self.current_training_environment = env
@@ -142,15 +147,54 @@ class DQNAgent:
         raise NotImplementedError
     def get_frontier_features(self):
 
-        features = [self.current_training_environment.test_features_on_transition(transition) for transition in
+        features = [self.current_training_environment.contexts[0].test_features_on_transition(transition) for transition in
                     self.current_training_environment.contexts[0].composition.getFrontier()]
-        return np.asarray(features.copy())
+        return np.asarray(features.copy())#TODO why copy? Memory cost of this?
     def get_action(self, s, epsilon):
         """ Gets epsilon-greedy action using self.model """
         if np.random.rand() <= epsilon:
             return np.random.randint(len(s))
         else:
             return self.model.best(s)
+    def batch_update(self):
+        action_featuress, rewards, obss2 = self.buffer.sample(self.args.batch_size)
+        if self.target is not None:
+            values = self.target.eval_batch(obss2)
+        else:
+            values = self.model.eval_batch(obss2)
+
+        if self.verbose:
+            print("Batch update. Values:", rewards+values)
+        breakpoint()
+        self.model.batch_update(np.array(action_featuress), rewards + values)
+    def update(self, obs, action, reward, obs2):
+        """ Gets epsilon-greedy action using self.model """
+        if self.target is not None:
+            value = self.target.eval(obs2)
+        else:
+            value = self.model.eval(obs2)
+
+        self.model.single_update(obs[action], value+reward)
+
+        if self.verbose:
+            print("Single update. Value:", value+reward)
+    def save(self, env_info, path):
+        os.makedirs(path, exist_ok=True)
+        OnnxModel(self.model).save(path + "/" + str(self.save_idx))
+
+        with open(path + "/" + str(self.save_idx) + ".json", "w") as f:
+            info = {
+                "training time": time.time() - self.training_start,
+                "training steps": self.training_steps,
+            }
+            info.update(vars(self.args))
+            info.update(env_info)
+            json.dump(info, f)
+
+        print("Agent", self.save_idx, "saved. Training time:", time.time() - self.training_start, "Training steps:", self.training_steps)
+        self.save_idx += 1
+
+
 
 
 class TrainingSession:
@@ -181,8 +225,6 @@ class TrainingSession:
         print("Warning: self.model being overwritten by hand, remember to refactor")
         self.last_steps = []
 
-
-        raise NotImplementedError
 
     def pause(self):
         raise NotImplementedError

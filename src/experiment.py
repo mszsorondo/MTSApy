@@ -45,6 +45,7 @@ class RLTrainingExperiment(TrainingExperiment):
         if self.args.exp_replay:
             self.agent._initializeBuffer(self.env, self.args.buffer_size)
         self.agent.set_training_environment(self.env)
+
         self.agent.train(max_steps=self.args.training_steps,
                          save_freq=self.args.save_freq,
                          save_at_end=True,
