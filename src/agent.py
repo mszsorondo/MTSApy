@@ -114,7 +114,7 @@ class DQNAgent:
             session.last_steps.append(obs[a])
             obs2, reward, done, step_info = self.current_training_environment.step(a)
 
-            #TODO refactor with DQN class and DQNExperienceReplay class or decorator with experience replay or similar
+            #TODO refactor with DQN class and DQNExperienceReplay class or decorator with ex                                                                        perience replay or similar
             #also modifying session.last_steps this way looks horrible
             if self.args.exp_replay:
                 if done:

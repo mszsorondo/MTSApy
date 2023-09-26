@@ -1,5 +1,6 @@
+import random
 import warnings
-
+from features import FeatureExtractor
 import networkx as nx
 
 from util import *
@@ -22,6 +23,23 @@ class CompositionGraph(nx.DiGraph):
         print("Warning: underlying Java code runs unused feature computations and buffers")
 
 
+    def load(self, path = f"/home/marco/Desktop/Learning-Synthesis/experiments/plants/full_AT_2_2.pkl"):
+        assert self._javaEnv is None, "You can't load a new graph in the middle of a composition. Make a new Composition object for that."
+        with open(path, 'rb') as f:
+            G_train = pickle.load(f)
+            breakpoint()
+            raise NotImplementedError
+
+    def full_composition(self):
+        assert self._javaEnv is not None and len(self.edges())==0, "You already started an expansion"
+        self._javaEnv.set_initial_as_none()
+        while(len(self.getFrontier())):
+            self._javaEnv.set_initial_as_none()
+            self.expand(0)
+
+        return self
+
+
     def reset_from_copy(self):
         return self.__class__(self._problem, self._n, self._k).start_composition()
     def start_composition(self, mtsa_version_path = 'mtsa.jar'):
@@ -40,7 +58,12 @@ class CompositionGraph(nx.DiGraph):
         self.add_node(self._initial_state)
         self._alphabet = [e for e in self._javaEnv.dcs.alphabet.actions]
         self._alphabet.sort()
+        breakpoint()
+
         return self
+
+
+
 
 
 
@@ -81,108 +104,9 @@ class CompositionGraph(nx.DiGraph):
 
     def finished(self):
         return self._javaEnv.isFinished()
-class CompositionAnalyzer:
-    """class used to get Composition information, usable as hand-crafted features
-        TODO this class will be replaced by object-oriented Feature class
-    """
-
-    def __init__(self, composition : CompositionGraph):
-        self.composition = composition
-        assert (self.composition._started)
-
-        self._no_indices_alphabet = list(set([self.remove_indices(str(e)) for e in composition._alphabet]))
-        self._no_indices_alphabet.sort()
-        self._fast_no_indices_alphabet_dict = dict()
-        for i in range(len(self._no_indices_alphabet)): self._fast_no_indices_alphabet_dict[self._no_indices_alphabet[i]]=i
-        self._fast_no_indices_alphabet_dict = bidict(self._fast_no_indices_alphabet_dict)
-        self._feature_methods = [self.event_label_feature,self.state_label_feature,self.controllable
-                                ,self.marked_state, self.current_phase,self.child_node_state,
-                                 self.uncontrollable_neighborhood, self.explored_state_child, self.isLastExpanded]
-
-
-    def test_features_on_transition(self, transition):
-        res = []
-        for compute_feature in self._feature_methods: res.extend(compute_feature(transition))
-        return [float(e) for e in res]
-    def event_label_feature(self, transition):
-        """
-        Determines the label of ℓ in A E p .
-        """
-        feature_vec_slice = [0 for _ in self._no_indices_alphabet]
-        self._set_transition_type_bit(feature_vec_slice, transition.action)
-        #print(no_idx_label, feature_vec_slice)
-        return feature_vec_slice
-
-    def _set_transition_type_bit(self, feature_vec_slice, transition):
-        no_idx_label = self.remove_indices(transition.toString())
-        feature_vec_slice_pos = self._fast_no_indices_alphabet_dict[no_idx_label]
-        feature_vec_slice[feature_vec_slice_pos] = 1
-
-    def state_label_feature(self, transition):
-        """
-        Determines the labels of the explored
-            transitions that arrive at s.
-        """
-        feature_vec_slice = [0 for _ in self._no_indices_alphabet]
-        arriving_to_s = transition.state.getParents()
-        for trans in arriving_to_s: self._set_transition_type_bit(feature_vec_slice,trans.getFirst())
-        return feature_vec_slice
-    def controllable(self, transition):
-        return [float(transition.action.isControllable())]
-    def marked_state(self, transition):
-        """Whether s and s ′ ∈ M E p ."""
-        return [float(transition.childMarked)]
-
-    def current_phase(self, transition):
-        return [float(self.composition._javaEnv.dcs.heuristic.goals_found > 0),
-                float(self.composition._javaEnv.dcs.heuristic.marked_states_found > 0),
-                float(self.composition._javaEnv.dcs.heuristic.closed_potentially_winning_loops > 0)]
-
-
-
-    def child_node_state(self, transition):
-        """Whether
-        s ′ is winning, losing, none,
-        or not yet
-        explored."""
-        res = [0, 0, 0]
-        if(transition.child is not None):
-            res = [float(transition.child.status.toString()=="GOAL"),
-                   float(transition.child.status.toString()=="ERROR"),
-                   float(transition.child.status.toString()=="NONE")]
-        return res
-    def uncontrollable_neighborhood(self, transition):
-        warnings.warn("Chequear que este bien")
-        return [float(transition.state.uncontrollableUnexploredTransitions>0),
-                float(transition.state.uncontrollableTransitions>0),
-                float(transition.child is None or transition.child.uncontrollableUnexploredTransitions > 0),
-                float(transition.child is None or transition.child.uncontrollableTransitions > 0)
-                ]
-
-    def explored_state_child(self, transition):
-        return [float(len(self.composition.out_edges(transition.state))!= transition.state.unexploredTransitions),
-                float(transition.child is not None and len(self.composition.out_edges(transition.child))!= transition.state.unexploredTransitions)]
-
-    def isLastExpanded(self, transition):
-        return [float(self.composition.getLastExpanded()==transition)]
-
-    def remove_indices(self, transition_label : str):
-        res = ""
-
-        for c in transition_label:
-            if not c.isdigit(): res += c
-
-        return res
-    def get_transition_features_size(self): return len(self.compute_features(self.composition.getFrontier()[0]))
-
-    def compute_features(self, transition):
-        res = []
-        for feature_method in self._feature_methods:
-            res += feature_method(transition)
-        return res
 
 class Environment:
-    def __init__(self, contexts : CompositionAnalyzer, normalize_reward : bool = False):
+    def __init__(self, contexts : FeatureExtractor, normalize_reward : bool = False):
         """Environment base class.
             TODO are contexts actually part of the concept of an RL environment?
             """
@@ -190,7 +114,7 @@ class Environment:
         self.normalize_reward = normalize_reward
 
     def reset_from_copy(self):
-        self.contexts = [CompositionAnalyzer(context.composition.reset_from_copy()) for context in self.contexts]
+        self.contexts = [FeatureExtractor(context.composition.reset_from_copy()) for context in self.contexts]
         return self
 
     def get_number_of_contexts(self):
@@ -224,11 +148,11 @@ class Environment:
         #TODO you can parallelize this
         return [self.contexts[0].compute_features(trans) for trans in self.contexts[0].getFrontier()]
 
-if __name__ == "__main__":
+"""if __name__ == "__main__":
     d = CompositionGraph("AT", 3, 3)
 
     d.start_composition()
-    da = CompositionAnalyzer(d)
+    da = FeatureExtractor(d)
     k = 0
     i = 100
     while(i and not d._javaEnv.isFinished()):
@@ -240,6 +164,11 @@ if __name__ == "__main__":
         #i-=1
 
     print(k)
-
+"""
+if __name__=="__main__":
+    d = CompositionGraph("AT", 3, 3)
+    d.start_composition()
+    d.full_composition()
+    #d.load()
 
 

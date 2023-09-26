@@ -1,5 +1,6 @@
 from util import *
-from composition import CompositionGraph, CompositionAnalyzer, Environment
+from composition import CompositionGraph, Environment
+from features import FeatureExtractor
 from agent import *
 
 class Experiment:
@@ -21,7 +22,7 @@ class TrainingExperiment(Experiment):
 class RLTrainingExperiment(TrainingExperiment):
     def __init__(self, args : argparse.Namespace, problem : str, context : tuple[int,int], ):
         super().__init__(args, problem, context)
-        self.env = Environment([CompositionAnalyzer(CompositionGraph(p, n, k).start_composition()) for p, n, k in self.training_contexts])
+        self.env = Environment([FeatureExtractor(CompositionGraph(p, n, k).start_composition()) for p, n, k in self.training_contexts])
         self.agent = self.init_agent()
         #self.reward etc
     def init_agent(self, agent=None):

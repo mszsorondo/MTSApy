@@ -12,7 +12,7 @@ class CompositionGraphTests:
                 f = open(f"test_outputs/{problem}_{ins[0]}_{ins[1]}", "w")
                 d = CompositionGraph(problem, ins[0], ins[1])
                 d.start_composition()
-                da = CompositionAnalyzer(d)
+                da = FeatureExtractor(d)
                 i = self.max_num_expansions
                 while (i and not d._javaEnv.isFinished()):
                     d.expand(0)
@@ -31,7 +31,7 @@ class CompositionGraphTests:
             for ins in self.instances:
                 d = CompositionGraph(problem, ins[0], ins[1])
                 d.start_composition()
-                da = CompositionAnalyzer(d)
+                da = FeatureExtractor(d)
                 i = self.max_num_expansions
                 while (i and not d._javaEnv.isFinished()):
                     d.expand(0)
