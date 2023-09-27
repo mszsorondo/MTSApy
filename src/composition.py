@@ -23,7 +23,19 @@ class CompositionGraph(nx.DiGraph):
         self._expansion_order = []
         print("Warning: underlying Java code runs unused feature computations and buffers")
 
-
+    def to_pure_nx(self, cls = nx.DiGraph):
+        D = cls()
+        D.nodes, D.edges = self.nodes, self.edges
+        return D
+    @staticmethod
+    def copy_with_nodes_as_ints(G):
+        mapping = bidict({n:i for n,i in zip(G.nodes, range(len(G.nodes)))})
+        D = nx.DiGraph()
+        D.add_nodes_from(mapping.values())
+        for s,t,d in G.edges(data=True):
+            d.pop("action_with_features")
+            D.add_edge(mapping[s],mapping[t], **d)
+        return D
     def load(self, path = f"/home/marco/Desktop/Learning-Synthesis/experiments/plants/full_AT_2_2.pkl"):
         assert self._javaEnv is None, "You can't load a new graph in the middle of a composition. Make a new Composition object for that."
         with open(path, 'rb') as f:

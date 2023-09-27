@@ -155,7 +155,8 @@ class FeatureExtractor:
                 float(transition.child is not None and len(self.composition.out_edges(transition.child))!= transition.state.unexploredTransitions)]
 
     def isLastExpanded(self, transition):
-        return [float(self.composition.getLastExpanded()==transition)]
+        breakpoint()
+        return [float(self.composition.getLastExpanded().state==transition.state), float(self.composition.getLastExpanded().child==transition.state)]
 
     def remove_indices(self, transition_label : str):
         res = ""
@@ -187,13 +188,15 @@ class FeatureExtractor:
         self.composition.full_composition()
         edge_features = self.non_frontier_features()
 
-        D = self.composition
+        CG = self.composition
 
         # fill attrs with features:
         for ((s, t), features) in edge_features.items():
-            D[s][t]["features"] = features
-        breakpoint()
-        data = from_networkx(D,group_edge_attrs=["features"])
+            CG[s][t]["features"] = features
+
+        D = CG.to_pure_nx()
+
+        data = from_networkx(CG.copy_with_nodes_as_ints(D),group_edge_attrs=["features"])
 
 
         out_channels = 2
@@ -205,7 +208,8 @@ class FeatureExtractor:
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = model.to(device)
-        #x = data.x.to(device)
+        x = data.x.to(device)
+        breakpoint()
 
 
 
