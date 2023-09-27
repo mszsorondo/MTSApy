@@ -1,3 +1,4 @@
+import copy
 import random
 import warnings
 from features import FeatureExtractor
@@ -27,15 +28,21 @@ class CompositionGraph(nx.DiGraph):
         assert self._javaEnv is None, "You can't load a new graph in the middle of a composition. Make a new Composition object for that."
         with open(path, 'rb') as f:
             G_train = pickle.load(f)
-            breakpoint()
             raise NotImplementedError
 
     def full_composition(self):
+        """
+        Composes the full plant.
+        """
         assert self._javaEnv is not None and len(self.edges())==0, "You already started an expansion"
         self._javaEnv.set_initial_as_none()
         while(len(self.getFrontier())):
             self._javaEnv.set_initial_as_none()
             self.expand(0)
+            nonfront = self.getNonFrontier()
+            lastexp = self.getLastExpanded()
+            assert lastexp.state == nonfront[len(nonfront)-1].state
+            assert lastexp.action == nonfront[len(nonfront) - 1].action
 
         return self
 
@@ -58,7 +65,6 @@ class CompositionGraph(nx.DiGraph):
         self.add_node(self._initial_state)
         self._alphabet = [e for e in self._javaEnv.dcs.alphabet.actions]
         self._alphabet.sort()
-        breakpoint()
 
         return self
 
@@ -81,6 +87,8 @@ class CompositionGraph(nx.DiGraph):
     def last_expansion_source_state(self):
         return self._javaEnv.heuristic.lastExpandedFrom
     def getFrontier(self): return self._javaEnv.heuristic.explorationFrontier
+
+    def getNonFrontier(self): return self._javaEnv.heuristic.allActionsWFNoFrontier
     def getLastExpanded(self): return self._javaEnv.heuristic.lastExpandedStateAction
 
     def _check_no_repeated_states(self):
@@ -148,6 +156,10 @@ class Environment:
         #TODO you can parallelize this
         return [self.contexts[0].compute_features(trans) for trans in self.contexts[0].getFrontier()]
 
+
+
+
+
 """if __name__ == "__main__":
     d = CompositionGraph("AT", 3, 3)
 
@@ -168,7 +180,11 @@ class Environment:
 if __name__=="__main__":
     d = CompositionGraph("AT", 3, 3)
     d.start_composition()
+    da = FeatureExtractor(d)
+
     d.full_composition()
+    breakpoint()
+    full_features = da.non_frontier_features()
     #d.load()
 
 

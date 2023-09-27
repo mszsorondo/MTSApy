@@ -1,16 +1,49 @@
 from util import *
 
 class Feature:
-    def __init__(self):
+    def __call__(cls, data):
         raise NotImplementedError
     def compute(self, data):
         raise NotImplementedError
 class GraphEmbedding(Feature):
-    def __init__(self):
-        raise NotImplementedError
-    def compute(self, data):
+
+    @classmethod
+    def compute(cls , data):
         raise NotImplementedError
 
+    @classmethod
+    def __call__(cls, data):
+        return cls.compute(data)
+
+class FeatureExtractor:
+    pass
+
+class TransitionFeature(Feature):
+    @classmethod
+    def __call__(cls, *args, **kwargs):
+        raise NotImplementedError
+    def compute(cls, state : FeatureExtractor, transition):
+        raise NotImplementedError
+
+class EventLabel(TransitionFeature):
+    #TODO a demonstration of which abstraction we aim to use in the future for feature compute.
+    # Implement for all of the features of FeatureExtractor
+    @classmethod
+    def __call__(cls, state: FeatureExtractor, transition):
+        return cls.compute(state, transition)
+    @classmethod
+    def compute(cls, state : FeatureExtractor, transition):
+        """
+            Determines the label of ℓ in A E p .
+                """
+        feature_vec_slice = [0 for _ in state._no_indices_alphabet]
+        state._set_transition_type_bit(feature_vec_slice, transition.action)
+        # print(no_idx_label, feature_vec_slice)
+        return feature_vec_slice
+
+class GCNEncoder(torch.nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(GCNEncoder, self).__init__()
 
 class FeatureExtractor:
     """class used to get Composition information, usable as hand-crafted features
@@ -30,7 +63,8 @@ class FeatureExtractor:
                                 ,self.marked_state, self.current_phase,self.child_node_state,
                                  self.uncontrollable_neighborhood, self.explored_state_child, self.isLastExpanded]
 
-
+    def phi(self):
+        return self.frontier_features(self)
     def test_features_on_transition(self, transition):
         res = []
         for compute_feature in self._feature_methods: res.extend(compute_feature(transition))
@@ -113,5 +147,15 @@ class FeatureExtractor:
             res += feature_method(transition)
         return res
 
+    def non_frontier_features(self):
+        return {(trans.state,trans.child) : self.compute_features(trans) for trans in self.composition.getNonFrontier()}
 
+    def frontier_features(self):
+        #TODO you can parallelize this
+        return {(trans.state,trans.child) : self.compute_features(trans) for trans in self.composition.getFrontier()}
+
+
+    def train_gnn_on_full_graph(self):
+        self.composition.full_composition()
+        D = self.composition
 
