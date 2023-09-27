@@ -1,5 +1,7 @@
 from util import *
-
+from torch_geometric.nn import GCNConv, GAE, Sequential
+from torch_geometric.utils import from_networkx
+from torch import nn
 class Feature:
     def __call__(cls, data):
         raise NotImplementedError
@@ -44,6 +46,29 @@ class EventLabel(TransitionFeature):
 class GCNEncoder(torch.nn.Module):
     def __init__(self, in_channels, out_channels):
         super(GCNEncoder, self).__init__()
+        planes = 128
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.first_layer = Sequential('x, edge_index', [
+            (GCNConv(in_channels, planes), 'x, edge_index -> x'),
+            nn.ReLU(inplace=True),
+        ])
+
+        def conv_block():
+            return Sequential('x, edge_index', [
+                (GCNConv(planes, planes), 'x, edge_index -> x'),
+                nn.ReLU(inplace=True)
+            ])
+
+        self.conv_blocks = Sequential('x, edge_index', [(conv_block(), 'x, edge_index -> x') for _ in range(7)])
+
+        self.last_linear = nn.Linear(planes, out_channels)
+
+    def forward(self, x, edge_index):
+        x = self.first_layer(x, edge_index)
+        x = self.conv_blocks(x, edge_index)
+        x = self.last_linear(x)
+        return x
 
 class FeatureExtractor:
     """class used to get Composition information, usable as hand-crafted features
@@ -139,7 +164,10 @@ class FeatureExtractor:
             if not c.isdigit(): res += c
 
         return res
-    def get_transition_features_size(self): return len(self.compute_features(self.composition.getFrontier()[0]))
+    def get_transition_features_size(self):
+        if(len(self.composition.getFrontier())): return len(self.compute_features(self.composition.getFrontier()[0]))
+        elif (len(self.composition.getNonFrontier())): return len(self.compute_features(self.composition.getNonFrontier()[0]))
+        else: raise ValueError
 
     def compute_features(self, transition):
         res = []
@@ -148,14 +176,37 @@ class FeatureExtractor:
         return res
 
     def non_frontier_features(self):
+        # TODO you can parallelize this (GPU etc)
         return {(trans.state,trans.child) : self.compute_features(trans) for trans in self.composition.getNonFrontier()}
 
     def frontier_features(self):
-        #TODO you can parallelize this
+        #TODO you can parallelize this (GPU etc)
         return {(trans.state,trans.child) : self.compute_features(trans) for trans in self.composition.getFrontier()}
-
 
     def train_gnn_on_full_graph(self):
         self.composition.full_composition()
+        edge_features = self.non_frontier_features()
+
         D = self.composition
+
+        # fill attrs with features:
+        for ((s, t), features) in edge_features.items():
+            D[s][t]["features"] = features
+        breakpoint()
+        data = from_networkx(D,group_edge_attrs=["features"])
+
+
+        out_channels = 2
+        num_features = self.get_transition_features_size()
+        epochs = 1000
+
+        # model
+        model = GAE(GCNEncoder(num_features, out_channels))
+
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model = model.to(device)
+        #x = data.x.to(device)
+
+
+
 

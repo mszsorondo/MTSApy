@@ -113,6 +113,7 @@ class CompositionGraph(nx.DiGraph):
     def finished(self):
         return self._javaEnv.isFinished()
 
+
 class Environment:
     def __init__(self, contexts : FeatureExtractor, normalize_reward : bool = False):
         """Environment base class.
@@ -182,9 +183,8 @@ if __name__=="__main__":
     d.start_composition()
     da = FeatureExtractor(d)
 
-    d.full_composition()
+    da.train_gnn_on_full_graph()
     breakpoint()
-    full_features = da.non_frontier_features()
-    #d.load()
+    d.load()
 
 
