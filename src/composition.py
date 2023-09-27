@@ -28,12 +28,12 @@ class CompositionGraph(nx.DiGraph):
         D.nodes, D.edges = self.nodes, self.edges
         return D
     @staticmethod
-    def copy_with_nodes_as_ints(G):
+    def copy_with_nodes_as_ints(G, drop_attrs = ["action_with_features", "label"]):
         mapping = bidict({n:i for n,i in zip(G.nodes, range(len(G.nodes)))})
         D = nx.DiGraph()
         D.add_nodes_from(mapping.values())
         for s,t,d in G.edges(data=True):
-            d.pop("action_with_features")
+            [d.pop(attr) for attr in drop_attrs]
             D.add_edge(mapping[s],mapping[t], **d)
         return D
     def load(self, path = f"/home/marco/Desktop/Learning-Synthesis/experiments/plants/full_AT_2_2.pkl"):
@@ -195,7 +195,7 @@ if __name__=="__main__":
     d.start_composition()
     da = FeatureExtractor(d)
 
-    da.train_gnn_on_full_graph()
+    da.train_gae_on_full_graph()
     breakpoint()
     d.load()
 

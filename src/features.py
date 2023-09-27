@@ -2,6 +2,7 @@ from util import *
 from torch_geometric.nn import GCNConv, GAE, Sequential
 from torch_geometric.utils import from_networkx
 from torch import nn
+
 class Feature:
     def __call__(cls, data):
         raise NotImplementedError
@@ -155,7 +156,6 @@ class FeatureExtractor:
                 float(transition.child is not None and len(self.composition.out_edges(transition.child))!= transition.state.unexploredTransitions)]
 
     def isLastExpanded(self, transition):
-        breakpoint()
         return [float(self.composition.getLastExpanded().state==transition.state), float(self.composition.getLastExpanded().child==transition.state)]
 
     def remove_indices(self, transition_label : str):
@@ -184,7 +184,9 @@ class FeatureExtractor:
         #TODO you can parallelize this (GPU etc)
         return {(trans.state,trans.child) : self.compute_features(trans) for trans in self.composition.getFrontier()}
 
-    def train_gnn_on_full_graph(self):
+    def train_gae_on_full_graph(self):
+        from torch_geometric.transforms import RandomLinkSplit
+
         self.composition.full_composition()
         edge_features = self.non_frontier_features()
 
@@ -197,20 +199,56 @@ class FeatureExtractor:
         D = CG.to_pure_nx()
 
         data = from_networkx(CG.copy_with_nodes_as_ints(D),group_edge_attrs=["features"])
-
+        transform = RandomLinkSplit(split_labels=True, add_negative_train_samples=True, neg_sampling_ratio=2.0, disjoint_train_ratio = 0.0)
+        train_data, val_data, test_data = transform(data)
 
         out_channels = 2
         num_features = self.get_transition_features_size()
-        epochs = 1000
-
+        epochs = 10000
+        #TODO adapt for RandomLinkSplit, continue with tutorial structure
         # model
         model = GAE(GCNEncoder(num_features, out_channels))
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = model.to(device)
-        x = data.x.to(device)
-        breakpoint()
+
+        x_train = train_data.edge_attr.to(device)
+        x_test = test_data.edge_attr.to(device)
+
+        train_pos_edge_label_index = train_data.pos_edge_label_index.to(device)
+
+        train_neg_edge_label_index = train_data.neg_edge_label_index.to(device) #TODO .encode and add to loss and EVAL
+        # inizialize the optimizer
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
+        for epoch in range(1, epochs + 1):
+
+            loss = train(model, optimizer,x_train,train_pos_edge_label_index)
+            auc, ap = test(model,test_data.pos_edge_label_index, test_data.neg_edge_label_index, x_test, train_pos_edge_label_index)
+            print('Epoch: {:03d}, AUC: {:.4f}, AP: {:.4f}'.format(epoch, auc, ap))
+    def train_node2vec(self):
+        raise NotImplementedError
+    def train_watch_your_step(self):
+        raise NotImplementedError
+    def train_DGI(self):
+        raise NotImplementedError
 
 
+def train(model, optimizer, x_train, train_pos_edge_label_index):
+    model.train()
+    optimizer.zero_grad()
+    z = model.encode(x_train, train_pos_edge_label_index)
+    loss = model.recon_loss(z, train_pos_edge_label_index)
+    # if args.variational:
+    #   loss = loss + (1 / data.num_nodes) * model.kl_loss()
+    loss.backward()
+    optimizer.step()
+    return float(loss)
+
+def test(model, test_pos_edge_index, test_neg_edge_index, x_test,train_pos_edge_label_index):
+    model.eval()
+    with torch.no_grad():
+        z = model.encode(x_test, train_pos_edge_label_index)
+    return model.test(z, test_pos_edge_index, test_neg_edge_index)
 
 
