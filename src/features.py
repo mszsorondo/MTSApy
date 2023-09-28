@@ -2,7 +2,7 @@ from util import *
 from torch_geometric.nn import GCNConv, GAE, Sequential
 from torch_geometric.utils import from_networkx
 from torch import nn
-
+from composition import CompositionGraph, util_remove_indices
 class Feature:
     def __call__(cls, data):
         raise NotImplementedError
@@ -18,31 +18,45 @@ class GraphEmbedding(Feature):
     def __call__(cls, data):
         return cls.compute(data)
 
-class FeatureExtractor:
-    pass
-
 class TransitionFeature(Feature):
-    @classmethod
-    def __call__(cls, *args, **kwargs):
-        raise NotImplementedError
-    def compute(cls, state : FeatureExtractor, transition):
-        raise NotImplementedError
 
-class EventLabel(TransitionFeature):
-    #TODO a demonstration of which abstraction we aim to use in the future for feature compute.
-    # Implement for all of the features of FeatureExtractor
     @classmethod
-    def __call__(cls, state: FeatureExtractor, transition):
+    def __call__(cls, state: CompositionGraph, transition):
         return cls.compute(state, transition)
     @classmethod
-    def compute(cls, state : FeatureExtractor, transition):
+    def compute(cls, state : CompositionGraph, transition):
+        raise NotImplementedError
+    @classmethod
+    def _set_transition_type_bit(cls,feature_vec_slice, transition, _fast_no_indices_alphabet_dict):
+        no_idx_label = util_remove_indices(transition.toString())
+        feature_vec_slice_pos = _fast_no_indices_alphabet_dict[no_idx_label]
+        feature_vec_slice[feature_vec_slice_pos] = 1
+
+
+class EventLabel(TransitionFeature):
+
+    @classmethod
+    def compute(cls, state : CompositionGraph, transition):
         """
             Determines the label of ℓ in A E p .
                 """
         feature_vec_slice = [0 for _ in state._no_indices_alphabet]
-        state._set_transition_type_bit(feature_vec_slice, transition.action)
+        cls._set_transition_type_bit(feature_vec_slice, transition.action, state._fast_no_indices_alphabet_dict)
         # print(no_idx_label, feature_vec_slice)
         return feature_vec_slice
+
+class StateLabel(TransitionFeature):
+    @classmethod
+    def compute(cls, state: CompositionGraph, transition):
+        """
+            Determines the labels of the explored
+                transitions that arrive at s.
+            """
+        feature_vec_slice = [0 for _ in state._no_indices_alphabet]
+        arriving_to_s = transition.state.getParents()
+        for trans in arriving_to_s: cls._set_transition_type_bit(feature_vec_slice, trans.getFirst(), state._fast_no_indices_alphabet_dict)
+        return feature_vec_slice
+
 
 class GCNEncoder(torch.nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -74,6 +88,10 @@ class GCNEncoder(torch.nn.Module):
 class FeatureExtractor:
     """class used to get Composition information, usable as hand-crafted features
         TODO this class will be replaced by object-oriented Feature class
+
+        Design:
+        attrs: Features (list of classes)
+        methods: .extract(featureClass, from = composition) .phi(composition)
     """
 
     def __init__(self, composition):
@@ -88,9 +106,10 @@ class FeatureExtractor:
         self._feature_methods = [self.event_label_feature,self.state_label_feature,self.controllable
                                 ,self.marked_state, self.current_phase,self.child_node_state,
                                  self.uncontrollable_neighborhood, self.explored_state_child, self.isLastExpanded]
+        self._feature_classes = [EventLabel, ]
 
     def phi(self):
-        return self.frontier_features(self)
+        return self.frontier_features()
     def test_features_on_transition(self, transition):
         res = []
         for compute_feature in self._feature_methods: res.extend(compute_feature(transition))
@@ -159,12 +178,7 @@ class FeatureExtractor:
         return [float(self.composition.getLastExpanded().state==transition.state), float(self.composition.getLastExpanded().child==transition.state)]
 
     def remove_indices(self, transition_label : str):
-        res = ""
-
-        for c in transition_label:
-            if not c.isdigit(): res += c
-
-        return res
+        util_remove_indices(transition_label)
     def get_transition_features_size(self):
         if(len(self.composition.getFrontier())): return len(self.compute_features(self.composition.getFrontier()[0]))
         elif (len(self.composition.getNonFrontier())): return len(self.compute_features(self.composition.getNonFrontier()[0]))
@@ -250,5 +264,61 @@ def test(model, test_pos_edge_index, test_neg_edge_index, x_test,train_pos_edge_
     with torch.no_grad():
         z = model.encode(x_test, train_pos_edge_label_index)
     return model.test(z, test_pos_edge_index, test_neg_edge_index)
+
+
+
+
+class Environment:
+    def __init__(self, contexts : FeatureExtractor, normalize_reward : bool = False):
+        """Environment base class.
+            TODO are contexts actually part of the concept of an RL environment?
+            """
+        self.contexts = contexts
+        self.normalize_reward = normalize_reward
+
+    def reset_from_copy(self):
+        self.contexts = [FeatureExtractor(context.composition.reset_from_copy()) for context in self.contexts]
+        return self
+
+    def get_number_of_contexts(self):
+        return len(self.contexts)
+    def get_contexts(self):
+        return self.contexts
+    def step(self, action_idx, context_idx = 0):
+        composition_graph = self.contexts[context_idx].composition
+        composition_graph.expand(action_idx) # TODO refactor. Analyzer should not be the expansion medium
+        Warning("HERE obs is not actions, but the featurization of the frontier actions")
+        if not composition_graph._javaEnv.isFinished(): return self.frontier_features(), self.reward(), False, {}
+        else: return None, self.reward(), True, self.get_results()
+    def get_results(self, context_idx = 0):
+        composition_dg = self.contexts[context_idx].composition
+        return {
+            "synthesis time(ms)": float(composition_dg._javaEnv.getSynthesisTime()),
+            "expanded transitions": int(composition_dg._javaEnv.getExpandedTransitions()),
+            "expanded states": int(composition_dg._javaEnv.getExpandedStates())
+        }
+
+
+    def reward(self):
+        #TODO ?normalize like Learning-Synthesis?
+        return -1
+    def state(self):
+        raise NotImplementedError
+    def actions(self, context_idx=0):
+        #TODO refactor
+        return self.contexts[context_idx].composition.getFrontier()
+    def frontier_features(self):
+        #TODO you can parallelize this
+        return [self.contexts[0].compute_features(trans) for trans in self.contexts[0].getFrontier()]
+
+
+if __name__=="__main__":
+    d = CompositionGraph("AT", 3, 3)
+    d.start_composition()
+    da = FeatureExtractor(d)
+
+    da.train_gae_on_full_graph()
+    breakpoint()
+    d.load()
 
 

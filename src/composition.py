@@ -1,9 +1,8 @@
 import copy
 import random
 import warnings
-from features import FeatureExtractor
 import networkx as nx
-
+from util import remove_indices as util_remove_indices
 from util import *
 
 
@@ -21,6 +20,7 @@ class CompositionGraph(nx.DiGraph):
         self._no_indices_alphabet = []
         self._number_of_goals = 0
         self._expansion_order = []
+        self._fast_no_indices_alphabet_dict = dict()
         print("Warning: underlying Java code runs unused feature computations and buffers")
 
     def to_pure_nx(self, cls = nx.DiGraph):
@@ -61,7 +61,8 @@ class CompositionGraph(nx.DiGraph):
 
     def reset_from_copy(self):
         return self.__class__(self._problem, self._n, self._k).start_composition()
-    def start_composition(self, mtsa_version_path = 'mtsa.jar'):
+    def start_composition(self, mtsa_version_path = 'mtsa.jar', no_tau=False):
+        #TODO more elegant tau removal
         assert(self._initial_state is None)
         if not jpype.isJVMStarted(): jpype.startJVM(classpath=[mtsa_version_path])
         from MTSTools.ac.ic.doc.mtstools.model.operations.DCS.nonblocking import DirectedControllerSynthesisNonBlocking, FeatureBasedExplorationHeuristic, DCSForPython
@@ -70,14 +71,19 @@ class CompositionGraph(nx.DiGraph):
         c = FeatureBasedExplorationHeuristic.compileFSP(f"{FSP_PATH}/{self._problem}/{self._problem}-{self._n}-{self._k}.fsp")
         ltss_init = c.getFirst()
         self._state_machines = [m.name for m in ltss_init.machines] #TODO: turn it into a dictionary that goes from the state machine name into its respective digraph
-        self._javaEnv = DCSForPython(None, None, 10000, ltss_init)
+        self._javaEnv = DCSForPython(None, f"{LABELS_PATH}/{self._problem}.txt", 10000, ltss_init)
         self._javaEnv.startSynthesis(f"{FSP_PATH}/{self._problem}/{self._problem}-{self._n}-{self._k}.fsp")
         assert(self._javaEnv is not None)
         self._initial_state = self._javaEnv.dcs.initial
         self.add_node(self._initial_state)
         self._alphabet = [e for e in self._javaEnv.dcs.alphabet.actions]
         self._alphabet.sort()
-
+        self._no_indices_alphabet = list(set([util_remove_indices(str(e)) for e in self._alphabet]))
+        self._no_indices_alphabet.sort()
+        if no_tau: self._no_indices_alphabet.remove("tau")
+        for i in range(len(self._no_indices_alphabet)): self._fast_no_indices_alphabet_dict[
+            self._no_indices_alphabet[i]] = i
+        self._fast_no_indices_alphabet_dict = bidict(self._fast_no_indices_alphabet_dict)
         return self
 
 
@@ -124,79 +130,26 @@ class CompositionGraph(nx.DiGraph):
 
     def finished(self):
         return self._javaEnv.isFinished()
+    def get_jvm(self):
+        return self._javaEnv
 
+    """if __name__ == "__main__":
+        d = CompositionGraph("AT", 3, 3)
+    
+        d.start_composition()
+        da = FeatureExtractor(d)
+        k = 0
+        i = 100
+        while(i and not d._javaEnv.isFinished()):
+            d.expand(0)
+            frontier_features = [(da.compute_features(trans)) for trans in d.getFrontier()]
+            assert(d._expansion_order[-1] in [e[2]["action_with_features"] for e in d.edges(data=True)])
+    
+            #k+=sum([sum(da.isLastExpanded(trans[2]["action_with_features"])) for trans in d.edges(data=True)])
+            #i-=1
+    
+        print(k)
+    """
 
-class Environment:
-    def __init__(self, contexts : FeatureExtractor, normalize_reward : bool = False):
-        """Environment base class.
-            TODO are contexts actually part of the concept of an RL environment?
-            """
-        self.contexts = contexts
-        self.normalize_reward = normalize_reward
-
-    def reset_from_copy(self):
-        self.contexts = [FeatureExtractor(context.composition.reset_from_copy()) for context in self.contexts]
-        return self
-
-    def get_number_of_contexts(self):
-        return len(self.contexts)
-    def get_contexts(self):
-        return self.contexts
-    def step(self, action_idx, context_idx = 0):
-        composition_graph = self.contexts[context_idx].composition
-        composition_graph.expand(action_idx) # TODO refactor. Analyzer should not be the expansion medium
-        Warning("HERE obs is not actions, but the featurization of the frontier actions")
-        if not composition_graph._javaEnv.isFinished(): return self.frontier_features(), self.reward(), False, {}
-        else: return None, self.reward(), True, self.get_results()
-    def get_results(self, context_idx = 0):
-        composition_dg = self.contexts[context_idx].composition
-        return {
-            "synthesis time(ms)": float(composition_dg._javaEnv.getSynthesisTime()),
-            "expanded transitions": int(composition_dg._javaEnv.getExpandedTransitions()),
-            "expanded states": int(composition_dg._javaEnv.getExpandedStates())
-        }
-
-
-    def reward(self):
-        #TODO ?normalize like Learning-Synthesis?
-        return -1
-    def state(self):
-        raise NotImplementedError
-    def actions(self, context_idx=0):
-        #TODO refactor
-        return self.contexts[context_idx].composition.getFrontier()
-    def frontier_features(self):
-        #TODO you can parallelize this
-        return [self.contexts[0].compute_features(trans) for trans in self.contexts[0].getFrontier()]
-
-
-
-
-
-"""if __name__ == "__main__":
-    d = CompositionGraph("AT", 3, 3)
-
-    d.start_composition()
-    da = FeatureExtractor(d)
-    k = 0
-    i = 100
-    while(i and not d._javaEnv.isFinished()):
-        d.expand(0)
-        frontier_features = [(da.compute_features(trans)) for trans in d.getFrontier()]
-        assert(d._expansion_order[-1] in [e[2]["action_with_features"] for e in d.edges(data=True)])
-
-        #k+=sum([sum(da.isLastExpanded(trans[2]["action_with_features"])) for trans in d.edges(data=True)])
-        #i-=1
-
-    print(k)
-"""
-if __name__=="__main__":
-    d = CompositionGraph("AT", 3, 3)
-    d.start_composition()
-    da = FeatureExtractor(d)
-
-    da.train_gae_on_full_graph()
-    breakpoint()
-    d.load()
 
 

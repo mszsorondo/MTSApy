@@ -278,3 +278,12 @@ def default_network(args, nfeatures, nn_size=[20]):
     nn_model = TorchModel(args, nfeatures, network=nn)
     return nn_model
 
+def remove_indices(transition_label : str):
+    res = ""
+
+    for c in transition_label:
+        if not c.isdigit() and c!='.': res += c
+
+    return res
+
+LABELS_PATH = "./fsp/labels"
