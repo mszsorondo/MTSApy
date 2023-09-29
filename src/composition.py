@@ -71,7 +71,8 @@ class CompositionGraph(nx.DiGraph):
         c = FeatureBasedExplorationHeuristic.compileFSP(f"{FSP_PATH}/{self._problem}/{self._problem}-{self._n}-{self._k}.fsp")
         ltss_init = c.getFirst()
         self._state_machines = [m.name for m in ltss_init.machines] #TODO: turn it into a dictionary that goes from the state machine name into its respective digraph
-        self._javaEnv = DCSForPython(None, f"{LABELS_PATH}/{self._problem}.txt", 10000, ltss_init)
+        #TODO stop using deleteme_featureset.txt for setting MTSA features below
+        self._javaEnv = DCSForPython("/home/marco/Desktop/MTSApy/src/features/deleteme_featureset.txt", f"{LABELS_PATH}/{self._problem}.txt", 10000, ltss_init)
         self._javaEnv.startSynthesis(f"{FSP_PATH}/{self._problem}/{self._problem}-{self._n}-{self._k}.fsp")
         assert(self._javaEnv is not None)
         self._initial_state = self._javaEnv.dcs.initial
