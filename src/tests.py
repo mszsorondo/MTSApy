@@ -19,8 +19,8 @@ class CompositionGraphTests:
                     last = d.getLastExpanded()
                     f.write("LastExpanded: " + str(last.action.toString()) + " Resulting Frontier Size: " + str(len(d.getFrontier())) +"\n")
                     frontier_features_image = ["\nSOURCE: " + str(trans.state.toString())+" -> TARGET: " + "None\n" + " \nFEATURES: \n" +
-                    str(da.compute_features(trans)) if trans.child is None else str(trans.child.toString())+ "FEATURES: \n" +
-                                                str(da.compute_features(trans)) for trans in d.getFrontier()]
+                    str(da.extract(trans)) if trans.child is None else str(trans.child.toString()) + "FEATURES: \n" +
+                                                                       str(da.extract(trans)) for trans in d.getFrontier()]
                     [f.write(im + "\n") for im in frontier_features_image]
                     f.write("\n")
                     i-=1
@@ -35,7 +35,7 @@ class CompositionGraphTests:
                 i = self.max_num_expansions
                 while (i and not d._javaEnv.isFinished()):
                     d.expand(0)
-                    frontier_features = [(da.compute_features(trans)) for trans in d.getFrontier()]
+                    frontier_features = [(da.extract(trans)) for trans in d.getFrontier()]
                     assert (d._expansion_order[-1] in [e[2]["action_with_features"] for e in d.edges(data=True)]), "Last expansion was not added to the composition graph."
                     i-=1
 

@@ -1,6 +1,5 @@
-from util import *
-from composition import CompositionGraph, Environment
-from features import FeatureExtractor
+from composition import Environment
+from src.features.extractor import FeatureExtractor
 from agent import *
 
 class Experiment:
