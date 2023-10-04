@@ -2,10 +2,9 @@ import torch
 from bidict import bidict
 from torch_geometric.nn import GAE
 from torch_geometric.utils import from_networkx
-from ..util import remove_indices as util_remove_indices
-from src.features.features import EventLabel, StateLabel, Controllable, MarkedState, CurrentPhase, ChildNodeState, \
+from util import remove_indices as util_remove_indices
+from features import EventLabel, StateLabel, Controllable, MarkedState, CurrentPhase, ChildNodeState, \
     UncontrollableNeighborhood, ExploredStateChild, IsLastExpanded, GCNEncoder, train, test
-from src.util import remove_indices
 
 
 class FeatureExtractor:
@@ -33,7 +32,7 @@ class FeatureExtractor:
     def extract(self, transition, state):
         res = []
         for feature in self._feature_classes:
-            res += feature.compute(transition,state)
+            res += feature.compute(state=state, transition=transition)
         return res
 
     def _set_transition_type_bit(self, feature_vec_slice, transition):
@@ -50,16 +49,17 @@ class FeatureExtractor:
         else: raise ValueError
     def non_frontier_features(self):
         # TODO you can parallelize this (GPU etc)
-        return {(trans.state,trans.child) : self.extract(trans) for trans in self.composition.getNonFrontier()}
+        return {(trans.state,trans.child) : self.extract(trans, self.composition) for trans in self.composition.getNonFrontier()}
 
     def frontier_features(self):
         #TODO you can parallelize this (GPU etc)
-        return {(trans.state,trans.child) : self.extract(trans) for trans in self.composition.getFrontier()}
+        return {(trans.state,trans.child) : self.extract(trans, self.composition) for trans in self.composition.getFrontier()}
 
-    def train_gae_on_full_graph(self):
+    def train_gae_on_full_graph(self, to_undirected = False):
         from torch_geometric.transforms import RandomLinkSplit
 
         self.composition.full_composition()
+        print(len(self.composition.nodes()), len(self.composition.edges()))
         edge_features = self.non_frontier_features()
 
         CG = self.composition
@@ -69,8 +69,9 @@ class FeatureExtractor:
             CG[s][t]["features"] = features
 
         D = CG.to_pure_nx()
-
-        data = from_networkx(CG.copy_with_nodes_as_ints(D),group_edge_attrs=["features"])
+        G = CG.copy_with_nodes_as_ints(D)
+        if to_undirected: G = G.to_undirected()
+        data = from_networkx(G,group_edge_attrs=["features"])
         transform = RandomLinkSplit(split_labels=True, add_negative_train_samples=True, neg_sampling_ratio=2.0, disjoint_train_ratio = 0.0)
         train_data, val_data, test_data = transform(data)
 

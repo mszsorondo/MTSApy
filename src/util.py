@@ -280,7 +280,7 @@ def default_network(args, nfeatures, nn_size=[20]):
 
 def remove_indices(transition_label : str):
     res = ""
-
+    transition_label = str(transition_label)
     for c in transition_label:
         if not c.isdigit() and c!='.': res += c
 

@@ -37,6 +37,7 @@ class CompositionGraph(nx.DiGraph):
             D.add_edge(mapping[s],mapping[t], **d)
         return D
     def load(self, path = f"/home/marco/Desktop/Learning-Synthesis/experiments/plants/full_AT_2_2.pkl"):
+        raise NotImplementedError
         assert self._javaEnv is None, "You can't load a new graph in the middle of a composition. Make a new Composition object for that."
         with open(path, 'rb') as f:
             G_train = pickle.load(f)
@@ -48,7 +49,7 @@ class CompositionGraph(nx.DiGraph):
         """
         assert self._javaEnv is not None and len(self.edges())==0, "You already started an expansion"
         self._javaEnv.set_initial_as_none()
-        while(len(self.getFrontier())):
+        while(self.getFrontierSize()>0):
             self._javaEnv.set_initial_as_none()
             self.expand(0)
             nonfront = self.getNonFrontier()
@@ -72,8 +73,9 @@ class CompositionGraph(nx.DiGraph):
         ltss_init = c.getFirst()
         self._state_machines = [m.name for m in ltss_init.machines] #TODO: turn it into a dictionary that goes from the state machine name into its respective digraph
         #TODO stop using deleteme_featureset.txt for setting MTSA features below
-        self._javaEnv = DCSForPython("/home/marco/Desktop/MTSApy/src/features/deleteme_featureset.txt", f"{LABELS_PATH}/{self._problem}.txt", 10000, ltss_init)
+        self._javaEnv = DCSForPython("/home/marco/Desktop/MTSApy/src/deleteme_featureset.txt", f"{LABELS_PATH}/{self._problem}.txt", 10000, ltss_init)
         self._javaEnv.startSynthesis(f"{FSP_PATH}/{self._problem}/{self._problem}-{self._n}-{self._k}.fsp")
+        self._javaEnv.heuristic.debugging = False
         assert(self._javaEnv is not None)
         self._initial_state = self._javaEnv.dcs.initial
         self.add_node(self._initial_state)
@@ -94,8 +96,11 @@ class CompositionGraph(nx.DiGraph):
 
     def expand(self, idx):
         assert(not self._javaEnv.isFinished()), "Invalid expansion, composition is already solved"
-        assert (idx<len(self.getFrontier()) and idx>=0), "Invalid index"
-        self._javaEnv.expandAction(idx) #TODO check this is the same index as in the python frontier list
+        assert (idx<self.getFrontierSize() and idx>=0), "Invalid index"
+
+        if self.getFrontierSize()>0:
+            self._javaEnv.expandAction(idx) #TODO check this is the same index as in the python frontier list
+        else: return
         new_state_action = self.getLastExpanded()
         controllability, label = self.getLastExpanded().action.isControllable(), self.getLastExpanded().action.toString()
         self.add_node(self.last_expansion_child_state())
@@ -108,6 +113,7 @@ class CompositionGraph(nx.DiGraph):
     def getFrontier(self): return self._javaEnv.heuristic.explorationFrontier
 
     def getNonFrontier(self): return self._javaEnv.heuristic.allActionsWFNoFrontier
+    def getFrontierSize(self): return self._javaEnv.frontierSize()
     def getLastExpanded(self): return self._javaEnv.heuristic.lastExpandedStateAction
 
     def _check_no_repeated_states(self):

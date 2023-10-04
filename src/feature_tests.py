@@ -15,10 +15,37 @@ JAVA_METHOD_TO_PYTHON_METHOD = {
     "isMarkedComputeSlice": MarkedState,
     "contextComputeSlice":CurrentPhase,
     "childStatusComputeSlice" : ChildNodeState,
-    "uncontrollableComputeSlice" : UncontrollableNeighborhood,
+    #"uncontrollableComputeSlice" : UncontrollableNeighborhood,
     "exploredComputeSlice" : ExploredStateChild,
     "justExploredComputeSlice" : IsLastExpanded
 }
+JAVA_METHOD_TO_PYTHON_METHOD = bidict(JAVA_METHOD_TO_PYTHON_METHOD)
+
+
+def test_feature_on_problem(java_feature_name : str,problem,n,k,post_mortem_debug):
+    cg = CompositionGraph(problem, n, k)
+    cg.start_composition(no_tau=True)
+    javaEnv = cg.get_jvm()
+    featureMaker = javaEnv.featureMaker
+    featureMaker.readLabelsOrdered(f"{LABELS_PATH}/{problem}.txt")  # readLabels
+    tr = cg.getFrontier()[0]
+    java_feature = getattr(featureMaker, java_feature_name)
+    while (not cg.finished()):
+        for trans in cg.getFrontier():
+            pyf_result = JAVA_METHOD_TO_PYTHON_METHOD[java_feature_name].compute(cg, trans)
+            jarf_result = [i for i in java_feature(trans)]
+            try:
+                assert (pyf_result == jarf_result)
+            except AssertionError:
+                if post_mortem_debug:
+                    print(f"Test failed for {java_feature_name} . Post-mortem debug")
+                    print(f"Java features: {jarf_result} ; Python features: {pyf_result}")
+                    breakpoint()
+                    o = 0
+        cg.expand(random.randint(0, len(cg.getFrontier()) - 1))
+    print(f"{problem} , {n}, {k} {java_feature_name} PASSED")
+
+
 def test_event_label_on_problem(problem,n,k, post_mortem_debug):
     cg = CompositionGraph(problem,n,k)
     cg.start_composition(no_tau=True)
@@ -26,11 +53,18 @@ def test_event_label_on_problem(problem,n,k, post_mortem_debug):
     featureMaker = javaEnv.featureMaker
     featureMaker.readLabelsOrdered(f"{LABELS_PATH}/{problem}.txt") #readLabels
     tr = cg.getFrontier()[0]
+
+    cg2 = CompositionGraph(problem, n, k)
+    cg2.start_composition(no_tau=True)
+    javaEnv2 = cg2.get_jvm()
+    featureMaker2 = javaEnv2.featureMaker
+    featureMaker2.readLabelsOrdered(f"{LABELS_PATH}/{problem}.txt")  # readLabels
+
     while (not cg.finished()):
         for trans in cg.getFrontier():
             pyf = EventLabel.compute(cg, trans)
             jarf = [i for i in featureMaker.alfComputeSlice(trans)]
-
+            breakpoint()
             try:
                 assert (pyf == jarf)
             except AssertionError:
@@ -48,10 +82,11 @@ def test_state_label_on_problem(problem,n,k, post_mortem_debug):
     javaEnv = cg.get_jvm()
     featureMaker = javaEnv.featureMaker
     featureMaker.readLabelsOrdered(f"{LABELS_PATH}/{problem}.txt") #readLabels
-    tr = cg.getFrontier()[0]
+    #tr = cg.getFrontier()[0]
     while (not cg.finished()):
         for trans in cg.getFrontier():
             pyf = StateLabel.compute(cg, trans)
+            breakpoint()
             jarf = [i for i in featureMaker.slfComputeSlice(trans)]
 
             try: assert(pyf==jarf)
@@ -81,6 +116,17 @@ def test_state_label(post_mortem_debug=False):
         for n in ns:
             for k in ks:
                 test_state_label_on_problem(problem,n,k,post_mortem_debug)
+def test_feature(feature_name, post_mortem_debug=False):
+    problems = ["AT", "BW", "DP", "TA", "TL"] #FIXME testing CM takes too long
+    ns = [2]
+    ks = [2, 3]
+    for problem in problems:
+        for n in ns:
+            for k in ks:
+                test_feature_on_problem(feature_name, problem, n, k, post_mortem_debug)
+
 if __name__ == "__main__":
-    test_event_label(post_mortem_debug=True)
-    test_state_label(post_mortem_debug=True)
+    #test_event_label(post_mortem_debug=True)
+    #test_state_label(post_mortem_debug=True)
+    for feature_name in JAVA_METHOD_TO_PYTHON_METHOD.keys():
+        test_feature(feature_name,True)

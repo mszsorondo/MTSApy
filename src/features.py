@@ -1,8 +1,7 @@
-from src.features.extractor import FeatureExtractor
-from ..util import *
+from util import *
 from torch_geometric.nn import GCNConv, Sequential
 from torch import nn
-from ..composition import CompositionGraph, util_remove_indices
+from composition import CompositionGraph, util_remove_indices
 class Feature:
     def __call__(cls, data):
         raise NotImplementedError
@@ -64,16 +63,20 @@ class Controllable(TransitionFeature):
         return [float(transition.action.isControllable())]
 
 class MarkedState(TransitionFeature):
+
+    @classmethod
     def compute(cls, state : CompositionGraph, transition):
-        return [float(transition.childMarked)]
+        return [float(transition.state.marked),float(transition.childMarked)]
 
 class CurrentPhase(TransitionFeature):
+    @classmethod
     def compute(cls, state: CompositionGraph, transition):
         return [float(state._javaEnv.dcs.heuristic.goals_found > 0),
                 float(state._javaEnv.dcs.heuristic.marked_states_found > 0),
                 float(state._javaEnv.dcs.heuristic.closed_potentially_winning_loops > 0)]
 
 class ChildNodeState(TransitionFeature):
+    @classmethod
     def compute(cls, state: CompositionGraph, transition):
         res = [0, 0, 0]
         if (transition.child is not None):
@@ -83,6 +86,7 @@ class ChildNodeState(TransitionFeature):
         return res
 
 class UncontrollableNeighborhood(TransitionFeature):
+    @classmethod
     def compute(cls, state: CompositionGraph, transition):
         return [float(transition.state.uncontrollableUnexploredTransitions > 0),
                 float(transition.state.uncontrollableTransitions > 0),
@@ -92,12 +96,14 @@ class UncontrollableNeighborhood(TransitionFeature):
 
 
 class ExploredStateChild(TransitionFeature):
+    @classmethod
     def compute(cls, state: CompositionGraph, transition):
         return [float(len(state.out_edges(transition.state)) != transition.state.unexploredTransitions),
                 float(transition.child is not None and len(
                     state.out_edges(transition.child)) != transition.state.unexploredTransitions)]
 
 class IsLastExpanded(TransitionFeature):
+    @classmethod
     def compute(cls, state: CompositionGraph, transition):
         return [float(state.getLastExpanded().state==transition.state), float(state.getLastExpanded().child==transition.state)]
 
@@ -149,59 +155,5 @@ def test(model, test_pos_edge_index, test_neg_edge_index, x_test,train_pos_edge_
     return model.test(z, test_pos_edge_index, test_neg_edge_index)
 
 
-
-
-class Environment:
-    def __init__(self, contexts : FeatureExtractor, normalize_reward : bool = False):
-        """Environment base class.
-            TODO are contexts actually part of the concept of an RL environment?
-            """
-        self.contexts = contexts
-        self.normalize_reward = normalize_reward
-
-    def reset_from_copy(self):
-        self.contexts = [FeatureExtractor(context.composition.reset_from_copy()) for context in self.contexts]
-        return self
-
-    def get_number_of_contexts(self):
-        return len(self.contexts)
-    def get_contexts(self):
-        return self.contexts
-    def step(self, action_idx, context_idx = 0):
-        composition_graph = self.contexts[context_idx].composition
-        composition_graph.expand(action_idx) # TODO refactor. Analyzer should not be the expansion medium
-        Warning("HERE obs is not actions, but the featurization of the frontier actions")
-        if not composition_graph._javaEnv.isFinished(): return self.frontier_features(), self.reward(), False, {}
-        else: return None, self.reward(), True, self.get_results()
-    def get_results(self, context_idx = 0):
-        composition_dg = self.contexts[context_idx].composition
-        return {
-            "synthesis time(ms)": float(composition_dg._javaEnv.getSynthesisTime()),
-            "expanded transitions": int(composition_dg._javaEnv.getExpandedTransitions()),
-            "expanded states": int(composition_dg._javaEnv.getExpandedStates())
-        }
-
-
-    def reward(self):
-        #TODO ?normalize like Learning-Synthesis?
-        return -1
-    def state(self):
-        raise NotImplementedError
-    def actions(self, context_idx=0):
-        #TODO refactor
-        return self.contexts[context_idx].composition.getFrontier()
-    def frontier_features(self):
-        #TODO you can parallelize this
-        return [self.contexts[0].extract(trans) for trans in self.contexts[0].getFrontier()]
-
-
-if __name__=="__main__":
-    d = CompositionGraph("AT", 3, 3)
-    d.start_composition()
-    da = FeatureExtractor(d)
-
-    da.train_gae_on_full_graph()
-    breakpoint()
-    d.load()
 
 
