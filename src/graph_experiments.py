@@ -15,11 +15,14 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = False, epoc
     #FIXME FIXME the inference is being performed purely on edges!!!!!!!!!!!
     Warning("Inference is being performed purely on edges!!!!!!!!!!!")
     from torch_geometric.transforms import RandomLinkSplit
-    writer = SummaryWriter(f"runs/feature_trains/", \
-        filename_suffix=f"{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}")
-    writer.add_text("training data",f"{str(self.composition)}")
+
 
     self.composition.full_composition()
+
+    writer = SummaryWriter(f"runs/feature_trains/{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}", \
+                           filename_suffix=f"{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}")
+    writer.add_text("training data", f"{str(self.composition)}")
+
     print(len(self.composition.nodes()), len(self.composition.edges()))
     edge_features = self.non_frontier_feature_vectors()
 
@@ -39,7 +42,7 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = False, epoc
     transform = RandomLinkSplit(split_labels=True, add_negative_train_samples=True, neg_sampling_ratio=2.0,
                                 disjoint_train_ratio=0.0)
     train_data, val_data, test_data = transform(data)
-    breakpoint()
+
     out_channels = 2
     num_features = self.get_transition_features_size()
     # TODO adapt for RandomLinkSplit, continue with tutorial structure
@@ -67,8 +70,8 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = False, epoc
         print('Epoch: {:03d}, AUC: {:.4f}, AP: {:.4f}'.format(epoch, auc, ap))
         writer.add_scalar("losses/loss", loss, epoch)
         writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
-        writer.add_scalar("metrics/AUC", auc)
-        writer.add_scalar("metrics/AP", ap)
+        writer.add_scalar("metrics/AUC", auc, epoch)
+        writer.add_scalar("metrics/AP", ap, epoch)
     writer.close()
 
 FeatureExtractor.train_gae_on_full_graph = train_gae_on_full_graph
@@ -87,7 +90,6 @@ if __name__=="__main__":
         ExploredStateChild: False,
         IsLastExpanded: False
     }
-    breakpoint()
     for i in range(1,len(ENABLED_PYTHON_FEATURES.keys())):
         d = CompositionGraph("AT", 3, 3)
         d.start_composition()
@@ -97,4 +99,4 @@ if __name__=="__main__":
 
         da.train_gae_on_full_graph(to_undirected=True, epochs=200)
 
-    d.load()
+    #d.load()

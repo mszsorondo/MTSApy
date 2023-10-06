@@ -30,7 +30,11 @@ class AutoencoderEmbeddings(GlobalFeature):
         raise NotImplementedError
     def train(self, data : CompositionGraph, static_feature_extractor) -> torch.nn.Module:
         raise NotImplementedError
-
+class Node2Vec(GlobalFeature):
+    def compute(cls, data : CompositionGraph) -> dict:
+        raise NotImplementedError
+    def train(self, data : CompositionGraph, static_feature_extractor) -> torch.nn.Module:
+        raise NotImplementedError
 class TransitionFeature(Feature):
 
     @classmethod

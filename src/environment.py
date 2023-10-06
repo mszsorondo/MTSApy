@@ -62,7 +62,7 @@ if __name__=="__main__":
         ExploredStateChild: False,
         IsLastExpanded: False
     }
-    for i in range(3,len(ENABLED_PYTHON_FEATURES.keys())):
+    for i in range(1,len(ENABLED_PYTHON_FEATURES.keys())):
         d = CompositionGraph("AT", 3, 3)
         d.start_composition()
         enable_first_n_values(ENABLED_PYTHON_FEATURES, i)
@@ -71,5 +71,4 @@ if __name__=="__main__":
 
         da.train_gae_on_full_graph(to_undirected=True, epochs=2000)
 
-        breakpoint()
     d.load()
