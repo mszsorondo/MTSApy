@@ -62,7 +62,7 @@ class DQNAgent:
 
         env.reset_from_copy()
         Warning("HERE obs is not actions, but the featurization of the frontier actions")
-        obs = env.frontier_features()
+        obs = env.frontier_feature_vectors()
         steps = 0
 
         last_steps = []
@@ -78,7 +78,7 @@ class DQNAgent:
                 last_steps = []
                 env.reset_from_copy()
                 Warning("HERE obs is not actions, but the featurization of the frontier actions")
-                obs = env.frontier_features()
+                obs = env.frontier_feature_vectors()
             else:
                 if len(last_steps) >= nstep:
                     states.append((last_steps[0], -nstep, obs2))

@@ -1,5 +1,6 @@
-from extractor import FeatureExtractor
+from extractor import *
 from composition import CompositionGraph
+from features import *
 class Environment:
     def __init__(self, contexts : FeatureExtractor, normalize_reward : bool = False):
         """Environment base class.
@@ -43,12 +44,32 @@ class Environment:
     def frontier_features(self):
         #TODO you can parallelize this
         return [self.contexts[0].extract(trans) for trans in self.contexts[0].getFrontier()]
-
+def enable_first_n_values(enabler, n):
+    for k,v in enabler.items():
+        enabler[k] = n>0
+        n-=1
 if __name__=="__main__":
-    d = CompositionGraph("DP", 3, 3)
+    d = CompositionGraph("AT", 3, 3)
     d.start_composition()
-    da = FeatureExtractor(d)
+    ENABLED_PYTHON_FEATURES = {
+        EventLabel: True,
+        StateLabel: False,
+        Controllable: False,
+        MarkedState: False,
+        CurrentPhase: False,
+        ChildNodeState: False,
+        UncontrollableNeighborhood: False,
+        ExploredStateChild: False,
+        IsLastExpanded: False
+    }
+    for i in range(3,len(ENABLED_PYTHON_FEATURES.keys())):
+        d = CompositionGraph("AT", 3, 3)
+        d.start_composition()
+        enable_first_n_values(ENABLED_PYTHON_FEATURES, i)
+        print(ENABLED_PYTHON_FEATURES)
+        da = FeatureExtractor(d,ENABLED_PYTHON_FEATURES)
 
-    da.train_gae_on_full_graph(to_undirected=True)
-    breakpoint()
+        da.train_gae_on_full_graph(to_undirected=True, epochs=2000)
+
+        breakpoint()
     d.load()

@@ -19,8 +19,6 @@ JAVA_METHOD_TO_PYTHON_METHOD = {
     "justExploredComputeSlice" : IsLastExpanded
 }
 JAVA_METHOD_TO_PYTHON_METHOD = bidict(JAVA_METHOD_TO_PYTHON_METHOD)
-
-
 def test_feature_on_problem(java_feature_name : str,problem,n,k,post_mortem_debug):
     cg = CompositionGraph(problem, n, k)
     cg.start_composition(no_tau=True)

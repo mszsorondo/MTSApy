@@ -4,9 +4,10 @@ from torch_geometric.nn import GAE
 from torch_geometric.utils import from_networkx
 from util import remove_indices as util_remove_indices
 from features import EventLabel, StateLabel, Controllable, MarkedState, CurrentPhase, ChildNodeState, \
-    UncontrollableNeighborhood, ExploredStateChild, IsLastExpanded, GCNEncoder, train, test
+    UncontrollableNeighborhood, ExploredStateChild, IsLastExpanded, GCNEncoder, train, test, Feature, GlobalFeature
 
-
+LEARNING_SYNTHESIS_BENCHMARK_FEATURES = [EventLabel,StateLabel, Controllable, MarkedState,CurrentPhase,
+                                 ChildNodeState,UncontrollableNeighborhood,ExploredStateChild,IsLastExpanded]
 class FeatureExtractor:
     """class used to get Composition information, usable as hand-crafted features
         Design:
@@ -14,7 +15,9 @@ class FeatureExtractor:
         methods: .extract(featureClass, from = composition) .phi(composition)
     """
 
-    def __init__(self, composition):
+    def __init__(self, composition, enabled_features_dict = None, feature_classes = LEARNING_SYNTHESIS_BENCHMARK_FEATURES):
+        #FIXME composition should be a parameter of phi, since FeatureExctractor works ...
+        # for any context independently UNLESS there are trained features
         self.composition = composition
         assert (self.composition._started)
 
@@ -23,16 +26,16 @@ class FeatureExtractor:
         self._fast_no_indices_alphabet_dict = dict()
         for i in range(len(self._no_indices_alphabet)): self._fast_no_indices_alphabet_dict[self._no_indices_alphabet[i]]=i
         self._fast_no_indices_alphabet_dict = bidict(self._fast_no_indices_alphabet_dict)
-        self._feature_classes = [EventLabel,StateLabel, Controllable, MarkedState,CurrentPhase,
-                                 ChildNodeState,UncontrollableNeighborhood,ExploredStateChild,IsLastExpanded]
-
+        self._feature_classes = feature_classes
+        self._enabled_feature_classes = enabled_features_dict if enabled_features_dict is not None else {feature : True for feature in self._feature_classes}
+        self._global_feature_classes = [feature_cls for feature_cls in self._feature_classes if feature_cls.__class__ == GlobalFeature]  #
     def phi(self):
-        return self.frontier_features()
+        return self.frontier_feature_vectors()
 
-    def extract(self, transition, state):
+    def extract(self, transition, state)-> list[float]:
         res = []
         for feature in self._feature_classes:
-            res += feature.compute(state=state, transition=transition)
+            if self.includes(feature): res += feature.compute(state=state, transition=transition)
         return res
 
     def _set_transition_type_bit(self, feature_vec_slice, transition):
@@ -47,61 +50,25 @@ class FeatureExtractor:
         if(len(self.composition.getFrontier())): return len(self.extract(self.composition.getFrontier()[0], self.composition))
         elif (len(self.composition.getNonFrontier())): return len(self.extract(self.composition.getNonFrontier()[0], self.composition))
         else: raise ValueError
-    def non_frontier_features(self):
+
+    def includes(self, feature):
+        return self._enabled_feature_classes[feature]
+    def non_frontier_feature_vectors(self) -> dict[tuple,list[float]]:
         # TODO you can parallelize this (GPU etc)
         return {(trans.state,trans.child) : self.extract(trans, self.composition) for trans in self.composition.getNonFrontier()}
 
-    def frontier_features(self):
+    def frontier_feature_vectors(self) -> dict[tuple,list[float]]:
         #TODO you can parallelize this (GPU etc)
         return {(trans.state,trans.child) : self.extract(trans, self.composition) for trans in self.composition.getFrontier()}
 
-    def train_gae_on_full_graph(self, to_undirected = False):
-        from torch_geometric.transforms import RandomLinkSplit
+    def global_feature_vectors(self) -> dict:
+        raise NotImplementedError
 
-        self.composition.full_composition()
-        print(len(self.composition.nodes()), len(self.composition.edges()))
-        edge_features = self.non_frontier_features()
-
-        CG = self.composition
-
-        # fill attrs with features:
-        for ((s, t), features) in edge_features.items():
-            CG[s][t]["features"] = features
-
-        D = CG.to_pure_nx()
-        G = CG.copy_with_nodes_as_ints(D)
-        if to_undirected: G = G.to_undirected()
-        data = from_networkx(G,group_edge_attrs=["features"])
-        transform = RandomLinkSplit(split_labels=True, add_negative_train_samples=True, neg_sampling_ratio=2.0, disjoint_train_ratio = 0.0)
-        train_data, val_data, test_data = transform(data)
-
-        out_channels = 2
-        num_features = self.get_transition_features_size()
-        epochs = 10000
-        #TODO adapt for RandomLinkSplit, continue with tutorial structure
-        # model
-        model = GAE(GCNEncoder(num_features, out_channels))
-
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model = model.to(device)
-
-        x_train = train_data.edge_attr.to(device)
-        x_test = test_data.edge_attr.to(device)
-
-        train_pos_edge_label_index = train_data.pos_edge_label_index.to(device)
-
-        train_neg_edge_label_index = train_data.neg_edge_label_index.to(device) #TODO .encode and add to loss and EVAL
-        # inizialize the optimizer
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-
-        for epoch in range(1, epochs + 1):
-
-            loss = train(model, optimizer,x_train,train_pos_edge_label_index)
-            auc, ap = test(model,test_data.pos_edge_label_index, test_data.neg_edge_label_index, x_test, train_pos_edge_label_index)
-            print('Epoch: {:03d}, AUC: {:.4f}, AP: {:.4f}'.format(epoch, auc, ap))
     def train_node2vec(self):
         raise NotImplementedError
     def train_watch_your_step(self):
         raise NotImplementedError
     def train_DGI(self):
         raise NotImplementedError
+    def __str__(self):
+        return str("feature classes: ", self._enabled_feature_classes)

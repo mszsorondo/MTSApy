@@ -7,7 +7,13 @@ class Feature:
         raise NotImplementedError
     def compute(self, data):
         raise NotImplementedError
-class GraphEmbedding(Feature):
+
+class NodeFeature(Feature):
+    @classmethod
+    def compute(cls, data):
+        raise NotImplementedError
+
+class GlobalFeature(Feature):
 
     @classmethod
     def compute(cls , data):
@@ -16,6 +22,14 @@ class GraphEmbedding(Feature):
     @classmethod
     def __call__(cls, data):
         return cls.compute(data)
+
+class AutoencoderEmbeddings(GlobalFeature):
+
+    @classmethod
+    def compute(cls, data : CompositionGraph) -> dict:
+        raise NotImplementedError
+    def train(self, data : CompositionGraph, static_feature_extractor) -> torch.nn.Module:
+        raise NotImplementedError
 
 class TransitionFeature(Feature):
 
@@ -44,7 +58,7 @@ class EventLabel(TransitionFeature):
         feature_vec_slice = [0 for _ in state._no_indices_alphabet]
         cls._set_transition_type_bit(feature_vec_slice, transition.action, state._fast_no_indices_alphabet_dict)
         # print(no_idx_label, feature_vec_slice)
-        return feature_vec_slice
+        return [float(e) for e in feature_vec_slice]
 
 class StateLabel(TransitionFeature):
     @classmethod

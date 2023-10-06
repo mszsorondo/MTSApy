@@ -12,7 +12,7 @@ class CompositionGraph(nx.DiGraph):
         super().__init__()
         self._problem, self._n, self._k = problem, n , k
         self._initial_state = None
-        self._state_machines  = [] # : list[nx.DiGraph]
+        self._state_machines  = [] # TODO: list[nx.DiGraph]
         self._frontier = []
         self._started, self._completed = False, False
         self._javaEnv = None
@@ -22,6 +22,10 @@ class CompositionGraph(nx.DiGraph):
         self._expansion_order = []
         self._fast_no_indices_alphabet_dict = dict()
         print("Warning: underlying Java code runs unused feature computations and buffers")
+
+    def __str__(self):
+        return f"Composition for {self._problem,self._n, self._k}. {len(self.nodes)} nodes found and {len(self.edges)} edges expanded. \n"\
+              + f"{self.getFrontierSize()} edges on frontier."
 
     def to_pure_nx(self, cls = nx.DiGraph):
         D = cls()
