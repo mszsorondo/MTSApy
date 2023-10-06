@@ -8,14 +8,13 @@ from features import *
 # unless you do internal refactors to MTSA that impact on current implementation
 
 JAVA_METHOD_TO_PYTHON_METHOD = {
-    #TODO generalize testing functions for all features, put parameters
     "alfComputeSlice" : EventLabel,
     "slfComputeSlice" : StateLabel,
     "isControllableComputeSlice" : Controllable,
     "isMarkedComputeSlice": MarkedState,
     "contextComputeSlice":CurrentPhase,
     "childStatusComputeSlice" : ChildNodeState,
-    #"uncontrollableComputeSlice" : UncontrollableNeighborhood,
+    "uncontrollableComputeSlice" : UncontrollableNeighborhood,
     "exploredComputeSlice" : ExploredStateChild,
     "justExploredComputeSlice" : IsLastExpanded
 }

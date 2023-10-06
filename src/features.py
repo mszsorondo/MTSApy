@@ -98,14 +98,13 @@ class UncontrollableNeighborhood(TransitionFeature):
 class ExploredStateChild(TransitionFeature):
     @classmethod
     def compute(cls, state: CompositionGraph, transition):
-        return [float(len(state.out_edges(transition.state)) != transition.state.unexploredTransitions),
-                float(transition.child is not None and len(
-                    state.out_edges(transition.child)) != transition.state.unexploredTransitions)]
+        return [float(transition.state.unexploredTransitions) != float(len(transition.state.getTransitions())),
+                float(transition.child is not None and float(transition.child.unexploredTransitions) != float(len(transition.child.getTransitions())))]
 
 class IsLastExpanded(TransitionFeature):
     @classmethod
     def compute(cls, state: CompositionGraph, transition):
-        return [float(state.getLastExpanded().state==transition.state), float(state.getLastExpanded().child==transition.state)]
+        return [float(transition.state==transition.heuristic.lastExpandedTo), float(transition.state==transition.heuristic.lastExpandedFrom)]
 
 
 
