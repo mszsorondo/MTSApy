@@ -1,3 +1,5 @@
+import random
+
 from util import *
 from torch_geometric.nn import GCNConv, Sequential
 from torch import nn
@@ -49,6 +51,40 @@ class TransitionFeature(Feature):
         feature_vec_slice_pos = _fast_no_indices_alphabet_dict[no_idx_label]
         feature_vec_slice[feature_vec_slice_pos] = 1
 
+class RandomTransitionFeature(TransitionFeature):
+    @classmethod
+    def compute(cls, state: CompositionGraph, transition, size=500):
+        return [float(i) for i in np.random.rand(size)]
+
+class RandomOneHotTransitionFeature(TransitionFeature):
+    @classmethod
+    def compute(cls, state: CompositionGraph, transition, size=300):
+        return [float(i) for i in (np.random.rand(size)>=0.5)]
+
+class RandomNodeFeature(NodeFeature):
+    @classmethod
+    def compute(cls, state: CompositionGraph, node, size=500):
+        return [float(i) for i in np.random.rand(size)]
+
+class LabelsOHE(NodeFeature):
+    @classmethod
+    def compute(cls, state: CompositionGraph, node, dir = "in"):
+        incoming = state.in_edges(node, data=True) if dir=="in" else state.out_edges(node, data=True)
+
+        feature_vec_slice = [0 for _ in state._no_indices_alphabet]
+        #arriving_to_s = transition.state.getParents()
+        for edge in incoming:
+            cls._set_transition_type_bit(feature_vec_slice, edge[2]["label"], state._fast_no_indices_alphabet_dict)
+        return feature_vec_slice
+    @classmethod
+    def _set_transition_type_bit(cls, feature_vec_slice, transition, _fast_no_indices_alphabet_dict):
+        no_idx_label = util_remove_indices(transition.toString() if type(transition) != str else transition)
+        feature_vec_slice_pos = _fast_no_indices_alphabet_dict[no_idx_label]
+        feature_vec_slice[feature_vec_slice_pos] = 1
+class RandomOneHotNodeFeature(NodeFeature):
+    @classmethod
+    def compute(cls, state: CompositionGraph, node, size=300):
+        return [float(i) for i in (np.random.rand(size)>=0.5)]
 
 class EventLabel(TransitionFeature):
 
@@ -80,11 +116,15 @@ class Controllable(TransitionFeature):
     def compute(cls, state : CompositionGraph, transition):
         return [float(transition.action.isControllable())]
 
-class MarkedState(TransitionFeature):
+class MarkedSourceAndSinkStates(TransitionFeature):
 
     @classmethod
     def compute(cls, state : CompositionGraph, transition):
         return [float(transition.state.marked),float(transition.childMarked)]
+class MarkedState(NodeFeature):
+    @classmethod
+    def compute(cls, state: CompositionGraph, node):
+        return [float(node.marked)]
 
 class CurrentPhase(TransitionFeature):
     @classmethod
@@ -154,9 +194,10 @@ class GCNEncoder(torch.nn.Module):
         return x
 
 
-def train(model, optimizer, x_train, train_pos_edge_label_index):
+def train(model, optimizer, x_train, train_pos_edge_label_index, train_neg_edge_label_inde):
     model.train()
     optimizer.zero_grad()
+    breakpoint()
     z = model.encode(x_train, train_pos_edge_label_index)
     loss = model.recon_loss(z, train_pos_edge_label_index)
     # if args.variational:
@@ -168,6 +209,7 @@ def train(model, optimizer, x_train, train_pos_edge_label_index):
 def test(model, test_pos_edge_index, test_neg_edge_index, x_test,train_pos_edge_label_index):
     model.eval()
     with torch.no_grad():
+        #breakpoint()
         z = model.encode(x_test, train_pos_edge_label_index)
     return model.test(z, test_pos_edge_index, test_neg_edge_index)
 

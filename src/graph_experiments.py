@@ -21,11 +21,12 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = False, epoc
 
     writer = SummaryWriter(f"runs/feature_trains/{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}", \
                            filename_suffix=f"{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}")
-    writer.add_text("training data", f"{str(self.composition)}")
+    writer.add_text("training data", f"{str(self.composition)}"+f"{str(self)}")
 
     print(len(self.composition.nodes()), len(self.composition.edges()))
     edge_features = self.non_frontier_feature_vectors()
 
+    node_features = self.static_node_features()
     CG = self.composition
 
     # fill attrs with features:
@@ -35,11 +36,11 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = False, epoc
     D = CG.to_pure_nx()
     G = CG.copy_with_nodes_as_ints(D)
     if to_undirected: G = G.to_undirected() #FIXME what about double edges between nodes?
-
+    breakpoint()
     data = from_networkx(G, group_edge_attrs=["features"])
     Warning("We should use RandomNodeSplit")
     Warning("How are negative edge features obtained?")
-    transform = RandomLinkSplit(split_labels=True, add_negative_train_samples=True, neg_sampling_ratio=2.0,
+    transform = RandomLinkSplit(split_labels=True, add_negative_train_samples=True, neg_sampling_ratio=14.0,
                                 disjoint_train_ratio=0.0)
     train_data, val_data, test_data = transform(data)
 
@@ -52,6 +53,7 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = False, epoc
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
 
+    Warning("This features are only of connected nodes")
     x_train = train_data.edge_attr.to(device)
     x_test = test_data.edge_attr.to(device)
 
@@ -60,11 +62,12 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = False, epoc
     #FIXME how are neg edge features computed if inference is done on edge features and not node features?
     train_neg_edge_label_index = train_data.neg_edge_label_index.to(device)  # TODO .encode and add to loss and EVAL
     # inizialize the optimizer
+    breakpoint()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     start_time = time.time()
 
     for epoch in range(1, epochs + 1):
-        loss = train(model, optimizer, x_train, train_pos_edge_label_index)
+        loss = train(model, optimizer, x_train, train_pos_edge_label_index, train_neg_edge_label_index)
         auc, ap = test(model, test_data.pos_edge_label_index, test_data.neg_edge_label_index, x_test,
                        train_pos_edge_label_index)
         print('Epoch: {:03d}, AUC: {:.4f}, AP: {:.4f}'.format(epoch, auc, ap))
@@ -80,23 +83,30 @@ if __name__=="__main__":
     d = CompositionGraph("AT", 3, 3)
     d.start_composition()
     ENABLED_PYTHON_FEATURES = {
-        EventLabel: True,
+        EventLabel: False,
         StateLabel: False,
         Controllable: False,
-        MarkedState: False,
+        MarkedSourceAndSinkStates: False,
         CurrentPhase: False,
         ChildNodeState: False,
         UncontrollableNeighborhood: False,
         ExploredStateChild: False,
-        IsLastExpanded: False
+        IsLastExpanded: False,
+        RandomTransitionFeature : False,
+        RandomOneHotTransitionFeature : True,
     }
-    for i in range(1,len(ENABLED_PYTHON_FEATURES.keys())):
+    d = CompositionGraph("DP", 2, 2)
+    d.start_composition()
+    da = FeatureExtractor(d, ENABLED_PYTHON_FEATURES, feature_classes=ENABLED_PYTHON_FEATURES.keys())
+
+    da.train_gae_on_full_graph(to_undirected=True, epochs=100000)
+    """for i in range(1,len(ENABLED_PYTHON_FEATURES.keys())):
         d = CompositionGraph("AT", 3, 3)
         d.start_composition()
         enable_first_n_values(ENABLED_PYTHON_FEATURES, i)
         print(ENABLED_PYTHON_FEATURES)
-        da = FeatureExtractor(d,ENABLED_PYTHON_FEATURES)
+        da = FeatureExtractor(d,ENABLED_PYTHON_FEATURES, feature_classes=ENABLED_PYTHON_FEATURES.keys())
 
         da.train_gae_on_full_graph(to_undirected=True, epochs=200)
-
+"""
     #d.load()

@@ -3,11 +3,10 @@ from bidict import bidict
 from torch_geometric.nn import GAE
 from torch_geometric.utils import from_networkx
 from util import remove_indices as util_remove_indices
-from features import EventLabel, StateLabel, Controllable, MarkedState, CurrentPhase, ChildNodeState, \
-    UncontrollableNeighborhood, ExploredStateChild, IsLastExpanded, GCNEncoder, train, test, Feature, GlobalFeature
+from features import *
 
-LEARNING_SYNTHESIS_BENCHMARK_FEATURES = [EventLabel,StateLabel, Controllable, MarkedState,CurrentPhase,
-                                 ChildNodeState,UncontrollableNeighborhood,ExploredStateChild,IsLastExpanded]
+LEARNING_SYNTHESIS_BENCHMARK_FEATURES = [EventLabel, StateLabel, Controllable, MarkedSourceAndSinkStates, CurrentPhase,
+                                         ChildNodeState, UncontrollableNeighborhood, ExploredStateChild, IsLastExpanded]
 class FeatureExtractor:
     """class used to get Composition information, usable as hand-crafted features
         Design:
@@ -29,6 +28,7 @@ class FeatureExtractor:
         self._feature_classes = feature_classes
         self._enabled_feature_classes = enabled_features_dict if enabled_features_dict is not None else {feature : True for feature in self._feature_classes}
         self._global_feature_classes = [feature_cls for feature_cls in self._feature_classes if feature_cls.__class__ == GlobalFeature]  #
+        self._node_feature_classes = [feature_cls for feature_cls in self._feature_classes if feature_cls.__class__ == NodeFeature]
     def phi(self):
         return self.frontier_feature_vectors()
 
@@ -61,6 +61,17 @@ class FeatureExtractor:
         #TODO you can parallelize this (GPU etc)
         return {(trans.state,trans.child) : self.extract(trans, self.composition) for trans in self.composition.getFrontier()}
 
+    def static_node_features(self):
+        #FIXME refactor this
+        for node in self.composition.nodes:
+            in_label_ohe = LabelsOHE.compute(self.composition, node, dir="in")
+            out_label_ohe = LabelsOHE.compute(self.composition, node, dir="out")
+            marked =  MarkedState.compute(self.composition, node)
+            self.composition.nodes[node]["features"] = in_label_ohe + out_label_ohe + marked
+
+
+
+
     def global_feature_vectors(self) -> dict:
         raise NotImplementedError
 
@@ -71,4 +82,4 @@ class FeatureExtractor:
     def train_DGI(self):
         raise NotImplementedError
     def __str__(self):
-        return str("feature classes: ", self._enabled_feature_classes)
+        return "feature classes: " + str(self._enabled_feature_classes)

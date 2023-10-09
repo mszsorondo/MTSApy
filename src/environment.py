@@ -55,7 +55,7 @@ if __name__=="__main__":
         EventLabel: True,
         StateLabel: False,
         Controllable: False,
-        MarkedState: False,
+        MarkedSourceAndSinkStates: False,
         CurrentPhase: False,
         ChildNodeState: False,
         UncontrollableNeighborhood: False,

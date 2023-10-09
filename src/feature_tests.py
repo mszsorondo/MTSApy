@@ -11,7 +11,7 @@ JAVA_METHOD_TO_PYTHON_METHOD = {
     "alfComputeSlice" : EventLabel,
     "slfComputeSlice" : StateLabel,
     "isControllableComputeSlice" : Controllable,
-    "isMarkedComputeSlice": MarkedState,
+    "isMarkedComputeSlice": MarkedSourceAndSinkStates,
     "contextComputeSlice":CurrentPhase,
     "childStatusComputeSlice" : ChildNodeState,
     "uncontrollableComputeSlice" : UncontrollableNeighborhood,
