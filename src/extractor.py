@@ -72,6 +72,7 @@ class FeatureExtractor:
 
 
 
+
     def global_feature_vectors(self) -> dict:
         raise NotImplementedError
 

@@ -32,13 +32,16 @@ class CompositionGraph(nx.DiGraph):
         D.nodes, D.edges = self.nodes, self.edges
         return D
     @staticmethod
-    def copy_with_nodes_as_ints(G, drop_attrs = ["action_with_features", "label"]):
+    def copy_with_nodes_as_ints(G, drop_edge_attrs = ["action_with_features", "label"]):
         mapping = bidict({n:i for n,i in zip(G.nodes, range(len(G.nodes)))})
+
         D = nx.DiGraph()
-        D.add_nodes_from(mapping.values())
+        for n,d in G.nodes(data=True):
+            D.add_node(mapping[n], **d)
         for s,t,d in G.edges(data=True):
-            [d.pop(attr) for attr in drop_attrs]
+            [d.pop(attr) for attr in drop_edge_attrs]
             D.add_edge(mapping[s],mapping[t], **d)
+
         return D
     def load(self, path = f"/home/marco/Desktop/Learning-Synthesis/experiments/plants/full_AT_2_2.pkl"):
         raise NotImplementedError
@@ -77,7 +80,7 @@ class CompositionGraph(nx.DiGraph):
         ltss_init = c.getFirst()
         self._state_machines = [m.name for m in ltss_init.machines] #TODO: turn it into a dictionary that goes from the state machine name into its respective digraph
         #TODO stop using deleteme_featureset.txt for setting MTSA features below
-        self._javaEnv = DCSForPython("/home/marco/Desktop/MTSApy/src/deleteme_featureset.txt", f"{LABELS_PATH}/{self._problem}.txt", 10000, ltss_init)
+        self._javaEnv = DCSForPython("./src/deleteme_featureset.txt", f"{LABELS_PATH}/{self._problem}.txt", 10000, ltss_init)
         self._javaEnv.startSynthesis(f"{FSP_PATH}/{self._problem}/{self._problem}-{self._n}-{self._k}.fsp")
         self._javaEnv.heuristic.debugging = False
         assert(self._javaEnv is not None)

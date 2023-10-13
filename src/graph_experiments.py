@@ -1,3 +1,4 @@
+import torch
 from torch.utils.tensorboard import SummaryWriter
 from environment import *
 import datetime
@@ -6,10 +7,45 @@ class TrainableFeatureExtractor(FeatureExtractor):
     def __init__(self, composition, enabled_features_dict = None, feature_classes = LEARNING_SYNTHESIS_BENCHMARK_FEATURES + TRAINABLE_FEATURES):
         super().__init__(composition,enabled_features_dict)
         self._trainable_features = [feature_cls for feature_cls in  self._feature_classes if hasattr(feature_cls, "train")]
-        breakpoint()
+
     def train(self, feature : Feature):
         assert(feature in self._trainable_features)
         feature.train(self.composition,self)
+
+class NodePairSplitter:
+    def __init__(self, data, split_labels=True, add_negative_train_samples=True, test_prop = 0.1):
+        Warning("Sending split tensors to DEVICE may be convenient if using accelerators (TODO).")
+
+        n_nodes = self.n_nodes = data.x.shape[0]
+        n_edges = self.n_edges = data.edge_index.shape[1]
+        n_neg_edges = (n_nodes ** 2) - n_edges
+
+        test_edge_index_idx = np.random.randint(0,n_edges,int(test_prop * n_edges))
+        train_edge_index_idx = [i for i in range(n_edges) if i not in test_edge_index_idx]
+
+        #neg_edge_index = torch.tensor([(i,j) for i in range(n_nodes) for j in range(n_nodes) if torch.tensor((i,j)) not in data.edge_index.T])
+        #assert(neg_edge_index.shape[0] == (n_edges ** 2)-n_edges)
+        self.pos_training_edge_index = data.edge_index.T[train_edge_index_idx].tolist()
+        self.pos_testing_edge_index = data.edge_index.T[test_edge_index_idx].tolist()
+
+        neg_edge_index = [[i,j] for i in range(n_nodes) for j in range(n_nodes) if [i,j] not in data.edge_index.T.tolist()]
+
+        neg_test_edge_index_idx = np.random.randint(0, len(neg_edge_index), int(test_prop * len(neg_edge_index)))
+        neg_train_edge_index_idx = [i for i in range(len(neg_edge_index)) if i not in neg_test_edge_index_idx]
+
+        self.neg_testing_edge_index = torch.tensor(neg_edge_index)[neg_test_edge_index_idx]
+        self.neg_training_edge_index = torch.tensor(neg_edge_index)[neg_train_edge_index_idx]
+        self.pos_training_edge_index = torch.tensor(self.pos_training_edge_index)
+        self.pos_testing_edge_index = torch.tensor(self.pos_testing_edge_index)
+
+    def get_split(self):
+        return self.pos_training_edge_index, self.neg_training_edge_index, self.pos_testing_edge_index, self.neg_testing_edge_index
+
+
+
+
+
+
 def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = False, epochs = 5000):
     #FIXME this should be converted into a Feature class in the future
     #FIXME FIXME the inference is being performed purely on edges!!!!!!!!!!!
@@ -19,9 +55,9 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = False, epoc
 
     self.composition.full_composition()
 
-    writer = SummaryWriter(f"runs/feature_trains/{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}", \
-                           filename_suffix=f"{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}")
-    writer.add_text("training data", f"{str(self.composition)}"+f"{str(self)}")
+    #writer = SummaryWriter(rf".runs/feature_trains/{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}", \
+    #                       filename_suffix=f"{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}")
+    #writer.add_text("training data", f"{str(self.composition)}"+f"{str(self)}")
 
     print(len(self.composition.nodes()), len(self.composition.edges()))
     edge_features = self.non_frontier_feature_vectors()
@@ -33,13 +69,16 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = False, epoc
     for ((s, t), features) in edge_features.items():
         CG[s][t]["features"] = features
 
+
     D = CG.to_pure_nx()
     G = CG.copy_with_nodes_as_ints(D)
     if to_undirected: G = G.to_undirected() #FIXME what about double edges between nodes?
-    breakpoint()
-    data = from_networkx(G, group_edge_attrs=["features"])
+    data = from_networkx(G, group_node_attrs=["features"])
     Warning("We should use RandomNodeSplit")
     Warning("How are negative edge features obtained?")
+    splitter = NodePairSplitter(data)
+    p_tr, n_tr, p_test, n_test = splitter.get_split()
+    breakpoint()
     transform = RandomLinkSplit(split_labels=True, add_negative_train_samples=True, neg_sampling_ratio=14.0,
                                 disjoint_train_ratio=0.0)
     train_data, val_data, test_data = transform(data)
@@ -62,7 +101,7 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = False, epoc
     #FIXME how are neg edge features computed if inference is done on edge features and not node features?
     train_neg_edge_label_index = train_data.neg_edge_label_index.to(device)  # TODO .encode and add to loss and EVAL
     # inizialize the optimizer
-    breakpoint()
+
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     start_time = time.time()
 
@@ -71,17 +110,15 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = False, epoc
         auc, ap = test(model, test_data.pos_edge_label_index, test_data.neg_edge_label_index, x_test,
                        train_pos_edge_label_index)
         print('Epoch: {:03d}, AUC: {:.4f}, AP: {:.4f}'.format(epoch, auc, ap))
-        writer.add_scalar("losses/loss", loss, epoch)
-        writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
-        writer.add_scalar("metrics/AUC", auc, epoch)
-        writer.add_scalar("metrics/AP", ap, epoch)
-    writer.close()
+        #writer.add_scalar("losses/loss", loss, epoch)
+        #writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
+        #writer.add_scalar("metrics/AUC", auc, epoch)
+        #writer.add_scalar("metrics/AP", ap, epoch)
+    #writer.close()
 
 FeatureExtractor.train_gae_on_full_graph = train_gae_on_full_graph
 
 if __name__=="__main__":
-    d = CompositionGraph("AT", 3, 3)
-    d.start_composition()
     ENABLED_PYTHON_FEATURES = {
         EventLabel: False,
         StateLabel: False,

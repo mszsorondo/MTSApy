@@ -197,7 +197,6 @@ class GCNEncoder(torch.nn.Module):
 def train(model, optimizer, x_train, train_pos_edge_label_index, train_neg_edge_label_inde):
     model.train()
     optimizer.zero_grad()
-    breakpoint()
     z = model.encode(x_train, train_pos_edge_label_index)
     loss = model.recon_loss(z, train_pos_edge_label_index)
     # if args.variational:
