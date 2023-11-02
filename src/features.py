@@ -194,23 +194,25 @@ class GCNEncoder(torch.nn.Module):
         return x
 
 
-def train(model, optimizer, x_train, train_pos_edge_label_index, train_neg_edge_label_inde):
+def train(model, optimizer, features, train_pos_edge_label_index, train_neg_edge_label_index):
     model.train()
     optimizer.zero_grad()
-    z = model.encode(x_train, train_pos_edge_label_index)
-    loss = model.recon_loss(z, train_pos_edge_label_index)
+
+    z = model.encode(features, train_pos_edge_label_index)
+    #   breakpoint()
+    loss = model.recon_loss(z, train_pos_edge_label_index, train_neg_edge_label_index)
     # if args.variational:
     #   loss = loss + (1 / data.num_nodes) * model.kl_loss()
     loss.backward()
     optimizer.step()
     return float(loss)
 
-def test(model, test_pos_edge_index, test_neg_edge_index, x_test,train_pos_edge_label_index):
+def test(model, test_pos_edge_index, test_neg_edge_index, features,train_pos_edge_label_index, train_neg_edge_label_index):
     model.eval()
     with torch.no_grad():
         #breakpoint()
-        z = model.encode(x_test, train_pos_edge_label_index)
-    return model.test(z, test_pos_edge_index, test_neg_edge_index)
+        z = model.encode(features, train_pos_edge_label_index)
+    return model.test(z, train_pos_edge_label_index, train_neg_edge_label_index)
 
 
 
