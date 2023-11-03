@@ -44,14 +44,16 @@ class NodePairSplitter:
         self.neg_testing_edge_index = []
         self.neg_training_edge_index = []
 
-        """while(len(self.pos_training_edge_index)<len(self.neg_training_edge_index)):
-            #FIXME algo asi? see DGL-s VGAE negative sampling with whiles
+        while(len(self.pos_training_edge_index)<len(self.neg_training_edge_index)):
+            raise NotImplementedError
+            #i = np.ra
 
 
 
 
-        self.pos_training_edge_index = torch.tensor( ).T
-        self.pos_testing_edge_index = torch.tensor(self.pos_testing_edge_index).T"""
+        self.pos_training_edge_index = torch.tensor(self.pos_training_edge_index).T
+        self.pos_testing_edge_index = torch.tensor(self.pos_testing_edge_index).T
+
 
 
     def get_split(self):
@@ -65,38 +67,25 @@ def train_vgae_official():
     import sys
     sys.path.append("/home/marco/Desktop/dgl/dgl/examples/pytorch/vgae")
     import train_vgae
+    import dgl
+    from torch_geometric.utils import to_dgl
+    d = CompositionGraph("AT", 3, 3)
+    d.start_composition()
+    d.full_composition()
 
-    train_vgae.dgl_main()
+    da = FeatureExtractor(d, ENABLED_PYTHON_FEATURES, feature_classes=ENABLED_PYTHON_FEATURES.keys())
+
+    data, device = da.composition_to_nx()
+    breakpoint()
+    dgl_data = to_dgl(data)
+    train_vgae.dgl_main(dgl_data) #TODO add parameters: graph, epochs, etc etc
 
 def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epochs = 5000, debug_graph = None):
     Warning("This function will be replaced by the official VGAE implementation from DGL")
     #FIXME this should be converted into a Feature class in the future
     #FIXME FIXME the inference is being performed purely on edges!!!!!!!!!!!
     #from torch_geometric.transforms import RandomLinkSplit
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    self.composition.full_composition()
-
-    #writer = SummaryWriter(rf".runs/feature_trains/{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}", \
-    #                       filename_suffix=f"{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}")
-    #writer.add_text("training data", f"{str(self.composition)}"+f"{str(self)}")
-
-    print(len(self.composition.nodes()), len(self.composition.edges()))
-    edge_features = self.non_frontier_feature_vectors()
-
-    node_features = self.static_node_features()
-    CG = self.composition
-
-    # fill attrs with features:
-    for ((s, t), features) in edge_features.items():
-        CG[s][t]["features"] = features
-
-
-    D = CG.to_pure_nx()
-    G = CG.copy_with_nodes_as_ints(D)
-    if to_undirected: G = G.to_undirected() #FIXME what about double edges between nodes?
-
-    data = from_networkx(G, group_node_attrs=["features"]) if debug_graph is None else debug_graph[0].to(device)
+    data, device = self.composition_to_nx(debug_graph, to_undirected)
 
     Warning("We should use RandomNodeSplit")
     Warning("How are negative edge features obtained?")
@@ -140,7 +129,30 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epoch
         #writer.add_scalar("metrics/AP", ap, epoch)
     #writer.close()
 
+
+def composition_to_nx(self, debug_graph=None, to_undirected=True):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # writer = SummaryWriter(rf".runs/feature_trains/{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}", \
+    #                       filename_suffix=f"{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}")
+    # writer.add_text("training data", f"{str(self.composition)}"+f"{str(self)}")
+    print(len(self.composition.nodes()), len(self.composition.edges()))
+    edge_features = self.non_frontier_feature_vectors()
+    node_features = self.static_node_features()
+    CG = self.composition
+    # fill attrs with features:
+    for ((s, t), features) in edge_features.items():
+        CG[s][t]["features"] = features
+    D = CG.to_pure_nx()
+    G = CG.copy_with_nodes_as_ints(D)
+    if to_undirected: G = G.to_undirected()  # FIXME what about double edges between nodes?
+    data = from_networkx(G, group_node_attrs=["features"]) if debug_graph is None else debug_graph[0].to(device)
+    data.feat = data.x
+    return data, device
+
+
 FeatureExtractor.train_gae_on_full_graph = train_gae_on_full_graph
+FeatureExtractor.composition_to_nx = composition_to_nx
+
 
 if __name__=="__main__":
     ENABLED_PYTHON_FEATURES = {
@@ -154,16 +166,22 @@ if __name__=="__main__":
         ExploredStateChild: False,
         IsLastExpanded: False,
         RandomTransitionFeature : False,
-        RandomOneHotTransitionFeature : True,
+        RandomOneHotTransitionFeature : False,
     }
-    breakpoint()
     enable_first_n_values(ENABLED_PYTHON_FEATURES, 9)
-    d = CompositionGraph("AT", 2, 2)
+    train_vgae_official()
+
+    d = CompositionGraph("AT", 3, 3)
     d.start_composition()
+    d.full_composition()
+
+
+
     da = FeatureExtractor(d, ENABLED_PYTHON_FEATURES, feature_classes=ENABLED_PYTHON_FEATURES.keys())
+    breakpoint()
+    data,device = da.composition_to_nx()
 
-
-    da.train_gae_on_full_graph(to_undirected=True, epochs=100000, debug_graph = Planetoid("./data", "Cora", split="full"))
+    da.train_gae_on_full_graph(to_undirected=True, epochs=100000)
     """for i in range(1,len(ENABLED_PYTHON_FEATURES.keys())):
         d = CompositionGraph("AT", 3, 3)
         d.start_composition()
