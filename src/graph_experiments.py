@@ -63,7 +63,8 @@ class NodePairSplitter:
 
 
 
-def train_vgae_official():
+def train_vgae_official(file_name = "vgae.pt"):
+    import pickle
     import sys
     sys.path.append("/home/marco/Desktop/dgl/dgl/examples/pytorch/vgae")
     import train_vgae
@@ -76,10 +77,14 @@ def train_vgae_official():
     da = FeatureExtractor(d, ENABLED_PYTHON_FEATURES, feature_classes=ENABLED_PYTHON_FEATURES.keys())
 
     data, device = da.composition_to_nx()
-    breakpoint()
-    dgl_data = to_dgl(data)
-    train_vgae.dgl_main(dgl_data) #TODO add parameters: graph, epochs, etc etc
 
+    dgl_data = to_dgl(data)
+    model = train_vgae.dgl_main(dgl_data) #TODO add parameters: graph, epochs, etc etc
+
+    torch.save(model, file_name)
+
+    breakpoint()
+    pass
 def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epochs = 5000, debug_graph = None):
     Warning("This function will be replaced by the official VGAE implementation from DGL")
     #FIXME this should be converted into a Feature class in the future
