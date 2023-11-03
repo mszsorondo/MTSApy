@@ -3,6 +3,8 @@ from torch.utils.tensorboard import SummaryWriter
 from environment import *
 import datetime
 from torch_geometric.datasets import Planetoid
+from dgl.examples.pytorch.vgae import train
+
 TRAINABLE_FEATURES = [AutoencoderEmbeddings]
 class TrainableFeatureExtractor(FeatureExtractor):
     def __init__(self, composition, enabled_features_dict = None, feature_classes = LEARNING_SYNTHESIS_BENCHMARK_FEATURES + TRAINABLE_FEATURES):
@@ -13,22 +15,24 @@ class TrainableFeatureExtractor(FeatureExtractor):
         assert(feature in self._trainable_features)
         feature.train(self.composition,self)
 
-class DynamicEdgeSampler:
+
     """
+    class DynamicEdgeSampler:
     Motivation:
     Sparse matrices with large number of nodes can be a problem when generating a negative edge index.
     Explicit generation and storage of this indices is very costly in terms of memory and time.
 
     """
 class NodePairSplitter:
-    def __init__(self, data, split_labels=True, add_negative_train_samples=True, test_prop = 0.1, proportional=False):
+    def __init__(self, data, split_labels=True, add_negative_train_samples=True, val_prop = 0.05,test_prop = 0.1, proportional=False):
         Warning("Sending split tensors to DEVICE may be convenient if using accelerators (TODO).")
 
         n_nodes = self.n_nodes = data.x.shape[0]
         n_edges = self.n_edges = data.edge_index.shape[1]
-        n_neg_edges = (n_nodes ** 2) - n_edges if proportional else n_nodes
+        n_neg_edges = (n_nodes ** 2) - n_edges if proportional else n_edges
 
         test_edge_index_idx = np.random.randint(0,n_edges,int(test_prop * n_edges))
+        #val_edge_index_idx = np.random.randint(0, n_edges, int(val_prop * n_edges))
         train_edge_index_idx = [i for i in range(n_edges) if i not in test_edge_index_idx]
 
         #neg_edge_index = torch.tensor([(i,j) for i in range(n_nodes) for j in range(n_nodes) if torch.tensor((i,j)) not in data.edge_index.T])
@@ -36,32 +40,18 @@ class NodePairSplitter:
         self.pos_training_edge_index = data.edge_index.T[train_edge_index_idx].tolist()
         self.pos_testing_edge_index = data.edge_index.T[test_edge_index_idx].tolist()
 
-        """edge_index_as_list =  data.edge_index.T.tolist()
-        edge_index_mtx = [[0 for i in range(n_nodes)] for j in range(n_nodes)]
-        for k in edge_index_as_list: edge_index_mtx[k[0]][k[1]] = 1
-        neg_edge_index = []
-        for i in range(n_nodes):
-            for j in range(n_nodes):
-                print([i,j])
-                if edge_index_mtx[i][j]==0: neg_edge_index.append([i,j])"""
-        #neg_edge_index = [[i,j] for i in range(n_nodes) for j in range(n_nodes) if [i,j] not in data.edge_index.T.tolist()]
+        self.neg_testing_edge_index = []
+        self.neg_training_edge_index = []
 
-        edge_index_tensor = torch.tensor(data.edge_index, device="cpu")
-        edge_index_mtx = torch.zeros((n_nodes, n_nodes), device="cpu")
-        edge_index_mtx[edge_index_tensor[0], edge_index_tensor[1]] = 1
-        edge_index_mtx_bool = edge_index_mtx == 0
-        neg_edge_index = torch.nonzero(edge_index_mtx_bool, as_tuple=True)
-        neg_edge_index = list(zip(neg_edge_index[0].tolist(), neg_edge_index[1].tolist()))
+        while(len(self.pos_training_edge_index)<len(self.neg_training_edge_index)):
+            #FIXME algo asi? see DGL-s VGAE negative sampling with whiles
 
-        neg_test_edge_index_idx = np.random.randint(0, len(neg_edge_index), int(test_prop * len(neg_edge_index)))
-        #neg_train_edge_index_idx = [i for i in range(len(neg_edge_index)) if i not in neg_test_edge_index_idx]
-        neg_train_edge_index_idx = np.setdiff1d(np.arange(len(neg_edge_index)), neg_test_edge_index_idx)
 
-        self.neg_testing_edge_index = torch.tensor(neg_edge_index)[neg_test_edge_index_idx].T
-        self.neg_training_edge_index = torch.tensor(neg_edge_index)[neg_train_edge_index_idx].T
-        self.pos_training_edge_index = torch.tensor(self.pos_training_edge_index).T
+
+
+        self.pos_training_edge_index = torch.tensor( ).T
         self.pos_testing_edge_index = torch.tensor(self.pos_testing_edge_index).T
-        breakpoint()
+
 
     def get_split(self):
         return self.pos_training_edge_index, self.neg_training_edge_index, self.pos_testing_edge_index, self.neg_testing_edge_index
@@ -98,7 +88,6 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epoch
     G = CG.copy_with_nodes_as_ints(D)
     if to_undirected: G = G.to_undirected() #FIXME what about double edges between nodes?
 
-    breakpoint()
     data = from_networkx(G, group_node_attrs=["features"]) if debug_graph is None else debug_graph[0].to(device)
 
     Warning("We should use RandomNodeSplit")
@@ -108,7 +97,7 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epoch
 
 
     out_channels = 2
-    #breakpoint()
+
     num_features = data.x.shape[1]
     # TODO adapt for RandomLinkSplit, continue with tutorial structure
     # model
@@ -159,6 +148,7 @@ if __name__=="__main__":
         RandomTransitionFeature : False,
         RandomOneHotTransitionFeature : True,
     }
+    breakpoint()
     enable_first_n_values(ENABLED_PYTHON_FEATURES, 9)
     d = CompositionGraph("AT", 2, 2)
     d.start_composition()
