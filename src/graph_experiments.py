@@ -3,7 +3,8 @@ from torch.utils.tensorboard import SummaryWriter
 from environment import *
 import datetime
 from torch_geometric.datasets import Planetoid
-from dgl.examples.pytorch.vgae import train
+
+
 
 TRAINABLE_FEATURES = [AutoencoderEmbeddings]
 class TrainableFeatureExtractor(FeatureExtractor):
@@ -43,14 +44,14 @@ class NodePairSplitter:
         self.neg_testing_edge_index = []
         self.neg_training_edge_index = []
 
-        while(len(self.pos_training_edge_index)<len(self.neg_training_edge_index)):
+        """while(len(self.pos_training_edge_index)<len(self.neg_training_edge_index)):
             #FIXME algo asi? see DGL-s VGAE negative sampling with whiles
 
 
 
 
         self.pos_training_edge_index = torch.tensor( ).T
-        self.pos_testing_edge_index = torch.tensor(self.pos_testing_edge_index).T
+        self.pos_testing_edge_index = torch.tensor(self.pos_testing_edge_index).T"""
 
 
     def get_split(self):
@@ -60,8 +61,15 @@ class NodePairSplitter:
 
 
 
+def train_vgae_official():
+    import sys
+    sys.path.append("/home/marco/Desktop/dgl/dgl/examples/pytorch/vgae")
+    import train_vgae
+
+    train_vgae.dgl_main()
 
 def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epochs = 5000, debug_graph = None):
+    Warning("This function will be replaced by the official VGAE implementation from DGL")
     #FIXME this should be converted into a Feature class in the future
     #FIXME FIXME the inference is being performed purely on edges!!!!!!!!!!!
     #from torch_geometric.transforms import RandomLinkSplit
