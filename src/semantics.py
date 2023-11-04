@@ -1,7 +1,28 @@
 from transformers import AutoConfig, AutoModel, AutoTokenizer
-
+from torch import flatten, stack
 model = AutoModel.from_pretrained("bert-base-cased")
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", padding='max_length', truncation=True)
+
+numbers = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"]
+
+
+tokens_by_number = [tokenizer(f"{num} out of ten philosophers ate", return_tensors="pt") for num in numbers]
+embeds_by_number = stack([flatten(model(**token).last_hidden_state) for token in tokens_by_number])
+breakpoint()
+
+
+inputs_cero_diez = tokenizer("Zero out of ten philosophers ate", return_tensors="pt")
+inputs_cinco_diez = tokenizer("Five out of ten philosophers ate", return_tensors="pt")
+inputs_diez_diex = tokenizer("Ten out of ten philosophers ate",  return_tensors="pt")
+
+outputs_cero_diez = model(**inputs_cero_diez).last_hidden_state
+outputs_cinco_diez = model(**inputs_cinco_diez).last_hidden_state
+outputs_diez_diez = model(**inputs_cero_diez).last_hidden_state
+
+
+flatten(outputs_cinco_diez).dot(flatten(outputs_diez_diez).T)
+breakpoint()
+
 
 context = ("FSP stands for 'Finite State Process' and it is a language that is used to model discrete event systems."
            "A system is modelled as a set of machines, each one of them with their own states, state changes are triggered"
@@ -20,6 +41,7 @@ with open("data/prompt_engineering/DirectorForNonBlocking_benchmark_generic_code
     fsp_code = f.read()
 
 compostate_info = ""
+#FIXME text is way too long
 inputs = tokenizer(context+fsp_code+compostate_info, return_tensors="pt")
 
 outputs = model(**inputs)
