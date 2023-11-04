@@ -59,10 +59,6 @@ class NodePairSplitter:
     def get_split(self):
         return self.pos_training_edge_index, self.neg_training_edge_index, self.pos_testing_edge_index, self.neg_testing_edge_index
 
-
-
-
-
 def train_vgae_official(file_name = "vgae.pt"):
     import pickle
     import sys
@@ -70,7 +66,7 @@ def train_vgae_official(file_name = "vgae.pt"):
     import train_vgae
     import dgl
     from torch_geometric.utils import to_dgl
-    d = CompositionGraph("AT", 3, 3)
+    d = CompositionGraph("CM", 2, 2)
     d.start_composition()
     d.full_composition()
 
@@ -83,8 +79,6 @@ def train_vgae_official(file_name = "vgae.pt"):
 
     torch.save(model, file_name)
 
-    breakpoint()
-    pass
 def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epochs = 5000, debug_graph = None):
     Warning("This function will be replaced by the official VGAE implementation from DGL")
     #FIXME this should be converted into a Feature class in the future
@@ -137,9 +131,6 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epoch
 
 def composition_to_nx(self, debug_graph=None, to_undirected=True):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # writer = SummaryWriter(rf".runs/feature_trains/{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}", \
-    #                       filename_suffix=f"{str((self.composition._problem, self.composition._n, self.composition._k))}_at_{str(datetime.datetime.now())}")
-    # writer.add_text("training data", f"{str(self.composition)}"+f"{str(self)}")
     print(len(self.composition.nodes()), len(self.composition.edges()))
     edge_features = self.non_frontier_feature_vectors()
     node_features = self.static_node_features()
@@ -174,8 +165,11 @@ if __name__=="__main__":
         RandomOneHotTransitionFeature : False,
     }
     enable_first_n_values(ENABLED_PYTHON_FEATURES, 9)
+
+    #PAPER IMPLEMENTATION
     train_vgae_official()
 
+    #OUR IMPLEMENTATION
     d = CompositionGraph("AT", 3, 3)
     d.start_composition()
     d.full_composition()
