@@ -1,0 +1,21 @@
+Sea f_s(e,G_pnk) una funcion que dado un estado featurizado* e dentro de una exploracion parcial de un problema
+p en n y k, retorna un embedding.
+---------------Error----------------
+Sea e1,p1,n1,k1 una instanciacion especifica de e,p,n,k. Sean e2,p1,n2,k2 donde e2 es el estado
+"semanticamente analogo" a e1 para la instanciacion de p1 en n2,k2.
+Queremos minimizar el error: E_i = f_s(e1,G_p1n1k1)-f_s(e2,G_p1n2k2)
+
+No solo queremos esto, sino que tambien queremos minimizar E_t = f_s(e1,G_p1n1k1)-f_s(e1,G'_p1n2k2) para el mismo estado en
+el mismo problema pero distinta cantidad de aristas expandidas.
+
+Ciertamente un transformer sobre la semantica del problema + la semantica del nodo nos va a dar un E_t = 0
+Un transformer presumiblemente nos podria dar un E_i bajo tambien, pero puede tambien hacerse un
+ entrenamiento sobre este error.
+
+Posibilidad: Establecer a mano un conjunto de "estados analogos" para cada problema (e.g. ningun filosofo comio,
+todos los filosofos comieron, ningun avion se movio, todos los aviones aterrizaron, )
+
+*Las features pueden extraerse con (por ejemplo: BERT sobre un prompt que incluya el FSP,
+las etiquetas de las aristas salientes y el estado visto como una lista de numeros.
+Tambien las features que ya tenemos del modelo y quizas el encoder del GAE)
+Queremos generar encoder que dado un problema P
