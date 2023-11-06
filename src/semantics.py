@@ -5,15 +5,16 @@ tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", padding='max_leng
 
 numbers = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"]
 
-
+#Problem: relative distance may be like we thought,
+# but absolute distance is so tiny that matmul losses precision
 tokens_by_number = [tokenizer(f"{num} out of ten philosophers ate", return_tensors="pt") for num in numbers]
 embeds_by_number = stack([flatten(model(**token).last_hidden_state) for token in tokens_by_number])
 breakpoint()
 
 
-inputs_cero_diez = tokenizer("Zero out of ten philosophers ate", return_tensors="pt")
-inputs_cinco_diez = tokenizer("Five out of ten philosophers ate", return_tensors="pt")
-inputs_diez_diex = tokenizer("Ten out of ten philosophers ate",  return_tensors="pt")
+inputs_cero_diez = tokenizer("philosopher one = zero, philosopher two = zero, philosopher three = zero", return_tensors="pt")
+inputs_cinco_diez = tokenizer("philosopher one = five, philosopher two = five, philosopher three = five", return_tensors="pt")
+inputs_diez_diex = tokenizer("philosopher one = ten, philosopher two = ten, philosopher three = ten",  return_tensors="pt")
 
 outputs_cero_diez = model(**inputs_cero_diez).last_hidden_state
 outputs_cinco_diez = model(**inputs_cinco_diez).last_hidden_state

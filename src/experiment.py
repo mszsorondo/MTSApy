@@ -1,5 +1,4 @@
-from composition import Environment
-from src.extractor import FeatureExtractor
+from extractor import FeatureExtractor
 from agent import *
 
 class Experiment:

@@ -7,7 +7,7 @@ from util import *
 
 
 
-class CompositionGraph(nx.DiGraph):
+class CompositionGraph(nx.MultiDiGraph):
     def __init__(self, problem, n, k):
         super().__init__()
         self._problem, self._n, self._k = problem, n , k
@@ -27,15 +27,15 @@ class CompositionGraph(nx.DiGraph):
         return f"Composition for {self._problem,self._n, self._k}. {len(self.nodes)} nodes found and {len(self.edges)} edges expanded. \n"\
               + f"{self.getFrontierSize()} edges on frontier."
 
-    def to_pure_nx(self, cls = nx.DiGraph):
+    def to_pure_nx(self, cls = nx.MultiDiGraph):
         D = cls()
         D.nodes, D.edges = self.nodes, self.edges
         return D
     @staticmethod
-    def copy_with_nodes_as_ints(G, drop_edge_attrs = ["action_with_features", "label"]):
+    def copy_with_nodes_as_ints(G, drop_edge_attrs = ["action_with_features"]):
         mapping = bidict({n:i for n,i in zip(G.nodes, range(len(G.nodes)))})
 
-        D = nx.DiGraph()
+        D = nx.MultiDiGraph()
         for n,d in G.nodes(data=True):
             D.add_node(mapping[n], **d)
         for s,t,d in G.edges(data=True):
@@ -57,12 +57,14 @@ class CompositionGraph(nx.DiGraph):
         assert self._javaEnv is not None and len(self.edges())==0, "You already started an expansion"
         self._javaEnv.set_initial_as_none()
         while(self.getFrontierSize()>0):
+
             self._javaEnv.set_initial_as_none()
             self.expand(0)
             nonfront = self.getNonFrontier()
             lastexp = self.getLastExpanded()
             assert lastexp.state == nonfront[len(nonfront)-1].state
             assert lastexp.action == nonfront[len(nonfront) - 1].action
+            self._javaEnv.set_compostate_as_none(lastexp.state)
 
         return self
 

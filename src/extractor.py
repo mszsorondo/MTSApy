@@ -61,14 +61,14 @@ class FeatureExtractor:
         #TODO you can parallelize this (GPU etc)
         return {(trans.state,trans.child) : self.extract(trans, self.composition) for trans in self.composition.getFrontier()}
 
-    def static_node_features(self):
+    def set_static_node_features(self):
         #FIXME refactor this
         for node in self.composition.nodes:
             in_label_ohe = LabelsOHE.compute(self.composition, node, dir="in")
             out_label_ohe = LabelsOHE.compute(self.composition, node, dir="out")
             marked =  MarkedState.compute(self.composition, node)
             self.composition.nodes[node]["features"] = in_label_ohe + out_label_ohe + marked
-
+            self.composition.nodes[node]["compostate"] = node.toString()
 
 
 

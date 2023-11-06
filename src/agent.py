@@ -1,5 +1,6 @@
 from util import *
-from composition import CompositionGraph, Environment
+from composition import CompositionGraph
+from environment import Environment
 from replay_buffer import ReplayBuffer
 import torch
 import json

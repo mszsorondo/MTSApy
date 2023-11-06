@@ -66,18 +66,19 @@ def train_vgae_official(file_name = "vgae.pt"):
     import train_vgae
     import dgl
     from torch_geometric.utils import to_dgl
-    d = CompositionGraph("CM", 2, 2)
-    d.start_composition()
-    d.full_composition()
+    for problem in ["AT", "DP","TA", "TL", "BW", "CM"]:
+        d = CompositionGraph(problem, 2, 2)
+        d.start_composition()
+        d.full_composition()
 
-    da = FeatureExtractor(d, ENABLED_PYTHON_FEATURES, feature_classes=ENABLED_PYTHON_FEATURES.keys())
+        da = FeatureExtractor(d, ENABLED_PYTHON_FEATURES, feature_classes=ENABLED_PYTHON_FEATURES.keys())
 
-    data, device = da.composition_to_nx()
+        data, device = da.composition_to_nx()
 
-    dgl_data = to_dgl(data)
-    model = train_vgae.dgl_main(dgl_data) #TODO add parameters: graph, epochs, etc etc
-
-    torch.save(model, file_name)
+        dgl_data = to_dgl(data)
+        best_model = train_vgae.dgl_main(dgl_data) #TODO add parameters: graph, epochs, etc etc
+        Warning("I'm not so sure the parameters are correctly loaded or if the parameters are from the best model (watch out running mean and variance etc)")
+        torch.save(best_model, problem + file_name)
 
 def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epochs = 5000, debug_graph = None):
     Warning("This function will be replaced by the official VGAE implementation from DGL")
@@ -129,19 +130,26 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epoch
     #writer.close()
 
 
-def composition_to_nx(self, debug_graph=None, to_undirected=True):
+def composition_to_nx(self, debug_graph=None, to_undirected=True, selected_transitions_to_inspect = []):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(len(self.composition.nodes()), len(self.composition.edges()))
     edge_features = self.non_frontier_feature_vectors()
-    node_features = self.static_node_features()
+    self.set_static_node_features()
     CG = self.composition
     # fill attrs with features:
+    selected_actions_to_inspect = []
     for ((s, t), features) in edge_features.items():
-        CG[s][t]["features"] = features
+        #if CG[s][t]["label"] in selected_transitions_to_inspect:
+            #selected_actions_to_inspect.append((s.toString(),t.toString(),CG[s][t]["label"]))
+        for edge in CG[s][t].values(): edge["features"] = features
+
+
     D = CG.to_pure_nx()
+
     G = CG.copy_with_nodes_as_ints(D)
     if to_undirected: G = G.to_undirected()  # FIXME what about double edges between nodes?
-    data = from_networkx(G, group_node_attrs=["features"]) if debug_graph is None else debug_graph[0].to(device)
+
+    data = from_networkx(G, group_node_attrs=["features"], group_edge_attrs=["label"]) if debug_graph is None else debug_graph[0].to(device)
     data.feat = data.x
     return data, device
 
@@ -169,6 +177,7 @@ if __name__=="__main__":
     #PAPER IMPLEMENTATION
     train_vgae_official()
 
+    breakpoint()
     #OUR IMPLEMENTATION
     d = CompositionGraph("AT", 3, 3)
     d.start_composition()
