@@ -17,6 +17,7 @@ class FeatureExtractor:
     def __init__(self, composition, enabled_features_dict = None, feature_classes = LEARNING_SYNTHESIS_BENCHMARK_FEATURES):
         #FIXME composition should be a parameter of phi, since FeatureExctractor works ...
         # for any context independently UNLESS there are trained features
+        # in general, composition should be completely decoupled from extractor (passed always as a parameter)
         self.composition = composition
         assert (self.composition._started)
 
@@ -59,7 +60,9 @@ class FeatureExtractor:
 
     def frontier_feature_vectors(self) -> dict[tuple,list[float]]:
         #TODO you can parallelize this (GPU etc)
-        return {(trans.state,trans.child) : self.extract(trans, self.composition) for trans in self.composition.getFrontier()}
+        #for trans in self.composition.getFrontier():
+
+        return {(trans.state,trans.action) : self.extract(trans, self.composition) for trans in self.composition.getFrontier()}
 
     def set_static_node_features(self):
         #FIXME refactor this

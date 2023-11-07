@@ -41,6 +41,7 @@ class RLTrainingExperiment(TrainingExperiment):
 
         #self.args.nfeatures = self.nfeatures
 
+        self.agent.set_feature_extractor(self.env.contexts[0].composition) #FIXME this parameter pass is horrible haha
         if self.args.exp_replay:
             self.agent._initializeBuffer(self.env, self.args.buffer_size)
         self.agent.set_training_environment(self.env)

@@ -4,7 +4,7 @@ from environment import Environment
 from replay_buffer import ReplayBuffer
 import torch
 import json
-
+from extractor import FeatureExtractor
 class Feature:
     def __init__(self, str_id):
         self.str_id = str_id
@@ -24,6 +24,7 @@ class DQNAgent:
         Warning("TODO: refactor this initialization")
         assert nn_model is not None or nfeatures is not None
 
+        self.feature_extractor = None
         self.current_training_environment = None
         self.args = args
         self.model = nn_model
@@ -53,9 +54,12 @@ class DQNAgent:
         if prebuilt is not None:
             self.model = prebuilt
             return
-        print("Inferred default model should also be possible in the future")
+        Warning("Inferred default model should also be possible in the future")
         raise NotImplementedError
         input_size = sum([feature.get_size(context) for feature in features])
+    def set_feature_extractor(self, composition : CompositionGraph):
+        self.feature_extractor = FeatureExtractor(composition)
+
     def _get_experience_from_random_policy(self, env : Environment, total_steps, nstep=1):
         """ TODO it is not ok for an agent to restart and execute the steps of the environment, refactor this
         A random policy is run for total_steps steps, saving the observations in the format of the replay buffer """
@@ -63,7 +67,8 @@ class DQNAgent:
 
         env.reset_from_copy()
         Warning("HERE obs is not actions, but the featurization of the frontier actions")
-        obs = env.frontier_feature_vectors()
+        breakpoint()
+        obs = self.frontier_feature_vectors_as_batch()
         steps = 0
 
         last_steps = []
@@ -79,7 +84,7 @@ class DQNAgent:
                 last_steps = []
                 env.reset_from_copy()
                 Warning("HERE obs is not actions, but the featurization of the frontier actions")
-                obs = env.frontier_feature_vectors()
+                obs = self.frontier_feature_vectors_as_batch()
             else:
                 if len(last_steps) >= nstep:
                     states.append((last_steps[0], -nstep, obs2))
@@ -104,6 +109,7 @@ class DQNAgent:
               early_stopping=False, save_at_end=False, results_path=None, n_agents_budget=1000):
         assert self.current_training_environment is not None
         assert self.model is not None
+        breakpoint()
         session = TrainingSession(self, self.current_training_environment, seconds, max_steps, max_eps, save_freq, last_obs,
               early_stopping, save_at_end, results_path, n_agents_budget)
         if (last_obs is None): self.current_training_environment.reset_from_copy()
@@ -151,6 +157,12 @@ class DQNAgent:
         features = [self.current_training_environment.contexts[0].test_features_on_transition(transition) for transition in
                     self.current_training_environment.contexts[0].composition.getFrontier()]
         return np.asarray(features.copy())#TODO why copy? Memory cost of this?
+    def frontier_feature_vectors(self) -> dict[tuple,list]:
+        Warning("Values should be np.arrays or torch tensors (faster)")
+        return self.feature_extractor.frontier_feature_vectors()
+
+    def frontier_feature_vectors_as_batch(self):
+        return list(self.frontier_feature_vectors().values())
     def get_action(self, s, epsilon):
         """ Gets epsilon-greedy action using self.model """
         if np.random.rand() <= epsilon:
