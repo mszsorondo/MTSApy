@@ -45,7 +45,7 @@ class Environment:
         return self.contexts[context_idx].composition.getFrontier()
     def frontier_features(self):
         #TODO you can parallelize this
-        return [self.contexts[0].extract(trans) for trans in self.contexts[0].getFrontier()]
+        return self.contexts[0].frontier_feature_vectors_as_batch()
 def enable_first_n_values(enabler, n):
     for k,v in enabler.items():
         enabler[k] = n>0

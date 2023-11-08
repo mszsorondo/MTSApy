@@ -31,6 +31,7 @@ class FeatureExtractor:
         self._global_feature_classes = [feature_cls for feature_cls in self._feature_classes if feature_cls.__class__ == GlobalFeature]  #
         self._node_feature_classes = [feature_cls for feature_cls in self._feature_classes if feature_cls.__class__ == NodeFeature]
     def phi(self):
+        #TODO make this function a parameter
         return self.frontier_feature_vectors()
 
     def extract(self, transition, state)-> list[float]:
@@ -63,7 +64,8 @@ class FeatureExtractor:
         #for trans in self.composition.getFrontier():
 
         return {(trans.state,trans.action) : self.extract(trans, self.composition) for trans in self.composition.getFrontier()}
-
+    def frontier_feature_vectors_as_batch(self):
+        return np.array(list(self.frontier_feature_vectors().values()), dtype=np.float32)
     def set_static_node_features(self):
         #FIXME refactor this
         for node in self.composition.nodes:

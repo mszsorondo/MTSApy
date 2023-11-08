@@ -128,7 +128,8 @@ class CompositionGraph(nx.MultiDiGraph):
     def _check_no_repeated_states(self):
         raise NotImplementedError
 
-
+    def info(self):
+        return {"n":self._n,"k":self._k,"problem":self._problem}
     def explored(self, transition):
         """
         TODO

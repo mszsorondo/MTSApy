@@ -5,7 +5,7 @@ class Experiment:
     def __init__(self, args : argparse.Namespace, problem : str):
         self.args = args
         self.problem = problem
-        self.results_path = "../experiments/" + args.exp_path + "/" + self.problem + "/"
+        self.results_path = "./experiments/" + args.exp_path + "/" + self.problem + "/"
     def write_info_to_file(self):
         raise NotImplementedError
 class TrainingExperiment(Experiment):
@@ -30,7 +30,6 @@ class RLTrainingExperiment(TrainingExperiment):
         return agent
     def compute_step_state(self):
         raise NotImplementedError
-
     def run(self):
         assert self.args.overwrite or not os.path.exists(self.results_path + "finished.txt"), \
             "Experiment is already fully trained, training would override" \
@@ -50,21 +49,30 @@ class RLTrainingExperiment(TrainingExperiment):
                          save_freq=self.args.save_freq,
                          save_at_end=True,
                          early_stopping=self.args.early_stopping,
-                         results_path=self.results_path)
+                         results_path=self.results_path + self.add_nk())
 
         with open(self.results_path + "training_data.pkl", "wb") as f:
-            pickle.dump((self.agent.training_data, self.args, self.env[self.training_contexts[0]].info), f)
+            #FIXME info dropped from saved tuple (see Learning-synthesis)
+            pickle.dump((self.agent.training_data, self.args), f)
 
         self.flag_as_fully_trained()
 
+    def add_nk(self):
+        res = str(list(self.env.contexts[0].composition.info().values())[:2])
+        return res
+
     def write_description(self):
         print("TODO write description")
+
+    def flag_as_fully_trained(self):
+        with open(self.results_path + "finished.txt", 'w') as f:
+            f.write("Fully trained. This function should write a summary of training stats in the future.")  # FIXME
     def __str__(self):
         raise NotImplementedError
 
 
+
 if __name__ == "__main__":
-    breakpoint()
     exp = RLTrainingExperiment(parse_args(), "AT", (2,2))
     exp.run()
     i = 0

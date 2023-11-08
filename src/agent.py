@@ -1,3 +1,5 @@
+import numpy as np
+
 from util import *
 from composition import CompositionGraph
 from environment import Environment
@@ -67,7 +69,6 @@ class DQNAgent:
 
         env.reset_from_copy()
         Warning("HERE obs is not actions, but the featurization of the frontier actions")
-        breakpoint()
         obs = self.frontier_feature_vectors_as_batch()
         steps = 0
 
@@ -109,13 +110,14 @@ class DQNAgent:
               early_stopping=False, save_at_end=False, results_path=None, n_agents_budget=1000):
         assert self.current_training_environment is not None
         assert self.model is not None
-        breakpoint()
+
         session = TrainingSession(self, self.current_training_environment, seconds, max_steps, max_eps, save_freq, last_obs,
               early_stopping, save_at_end, results_path, n_agents_budget)
         if (last_obs is None): self.current_training_environment.reset_from_copy()
 
-        obs = self.get_frontier_features() if (last_obs is None) else last_obs
 
+        obs = self.frontier_feature_vectors_as_batch() if (last_obs is None) else last_obs
+        breakpoint()
         while(session.not_finished()):
             a = self.get_action(obs, self.epsilon)
             session.last_steps.append(obs[a])
@@ -133,19 +135,23 @@ class DQNAgent:
                         self.buffer.add(session.last_steps[0], -self.args.n_step, obs2)
                     session.last_steps = session.last_steps[len(session.last_steps) - self.args.n_step + 1:]
                 #TODO how is this? see Learning-Synthesis agent.batch_update
+
                 self.batch_update()
             else:
                 self.update(obs, a, reward, obs2)
 
             if not done: obs = obs2
             else:
-                info = session.compute_final_info(step_info)
-                obs = self.current_training_environment.reset_from_copy()
+                #info = session.compute_final_info(step_info)
+                self.current_training_environment.reset_from_copy()
+                obs = self.frontier_feature_vectors_as_batch()
 
             if self.training_steps % save_freq == 0 and results_path is not None:
-                self.save(self.current_training_environment.info, path=results_path)
-                n_agents_budget -= 1
-            breakpoint()
+                session.save(self)
+                #self.save(self.current_training_environment.info, path=results_path)
+                session.n_agents_budget -= 1
+            print(session.n_agents_budget)
+
 
     def set_training_environment(self, env: Environment):
         self.current_training_environment = env
@@ -162,7 +168,7 @@ class DQNAgent:
         return self.feature_extractor.frontier_feature_vectors()
 
     def frontier_feature_vectors_as_batch(self):
-        return list(self.frontier_feature_vectors().values())
+        return self.feature_extractor.frontier_feature_vectors_as_batch()
     def get_action(self, s, epsilon):
         """ Gets epsilon-greedy action using self.model """
         if np.random.rand() <= epsilon:
@@ -178,7 +184,7 @@ class DQNAgent:
 
         if self.verbose:
             print("Batch update. Values:", rewards+values)
-        breakpoint()
+
         self.model.batch_update(np.array(action_featuress), rewards + values)
     def update(self, obs, action, reward, obs2):
         """ Gets epsilon-greedy action using self.model """
@@ -242,12 +248,26 @@ class TrainingSession:
     def pause(self):
         raise NotImplementedError
 
-    def save(self):
-        raise NotImplementedError
+    def save(self, agent):
+        os.makedirs(self.results_path, exist_ok=True)
+        OnnxModel(agent.model).save(self.results_path  + "/" + str(agent.save_idx))
+
+        with open(self.results_path + "/" + str(agent.save_idx) + ".json", "w") as f:
+            info = {
+                "training time": time.time() - agent.training_start,
+                "training steps": agent.training_steps,
+            }
+            info.update(vars(agent.args))
+            info.update(self.env.contexts[0].composition.info())
+            info.update({'expansion_budget_exceeded': 'false'})
+            json.dump(info, f)
+
+        print("Agent", agent.save_idx, "saved. Training time:", time.time() - agent.training_start, "Training steps:",
+              agent.training_steps)
+        agent.save_idx += 1
 
     def not_finished(self):
         return self.n_agents_budget>0
-        raise NotImplementedError
 
     def compute_final_info(self, info):
         instance = (self.env.info["problem"], self.env.info["n"], self.env.info["k"])
