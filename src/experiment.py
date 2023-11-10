@@ -88,7 +88,7 @@ class RLTrainingExperiment(TrainingExperiment):
 
 if __name__ == "__main__":
 
-    problems = ["TL"]
+    problems = ["AT"]
     for problem in problems:
         exp = RLTrainingExperiment(parse_args(), problem, (2,2))
         exp.run()
