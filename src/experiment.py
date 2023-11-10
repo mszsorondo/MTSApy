@@ -1,6 +1,7 @@
 from extractor import FeatureExtractor
 from agent import *
-
+from agent import TrainingSession
+from environment import EnvironmentRefactored
 class Experiment:
     def __init__(self, args : argparse.Namespace, problem : str):
         self.args = args
@@ -22,6 +23,9 @@ class RLTrainingExperiment(TrainingExperiment):
         super().__init__(args, problem, context)
         self.env = Environment([FeatureExtractor(CompositionGraph(p, n, k).start_composition()) for p, n, k in self.training_contexts])
         self.agent = self.init_agent()
+        self.args = args
+
+        #self.env_refactor = EnvironmentRefactored(CompositionGraph(self.training_contexts))
         #self.reward etc
     def init_agent(self, agent=None):
         nfeatures = self.env.contexts[0].get_transition_features_size() #TODO refactor, hardcoded
@@ -30,6 +34,16 @@ class RLTrainingExperiment(TrainingExperiment):
         return agent
     def compute_step_state(self):
         raise NotImplementedError
+    def run_refactored(self):
+        # TrainingSession should have the summarywriter
+
+        agent_refactor = DQNAgentRefactored(self.args,FeatureExtractor)
+
+        session = TrainingSession(self.agent,self.env_refactor,n_agents_budget=150)
+
+        session.run()
+
+
     def run(self):
         assert self.args.overwrite or not os.path.exists(self.results_path + "finished.txt"), \
             "Experiment is already fully trained, training would override" \
@@ -73,6 +87,9 @@ class RLTrainingExperiment(TrainingExperiment):
 
 
 if __name__ == "__main__":
-    exp = RLTrainingExperiment(parse_args(), "AT", (2,2))
-    exp.run()
+
+    problems = ["TL"]
+    for problem in problems:
+        exp = RLTrainingExperiment(parse_args(), problem, (2,2))
+        exp.run()
     i = 0

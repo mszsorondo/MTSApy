@@ -166,7 +166,10 @@ class IsLastExpanded(TransitionFeature):
     def compute(cls, state: CompositionGraph, transition):
         return [float(transition.state==transition.heuristic.lastExpandedTo), float(transition.state==transition.heuristic.lastExpandedFrom)]
 
-
+class ChildDeadlock(TransitionFeature):
+    @classmethod
+    def compute(cls, state : CompositionGraph, transition):
+        return [float(transition.child is not None and len(transition.child.getTransitions()) == 0)]
 
 class GCNEncoder(torch.nn.Module):
     def __init__(self, in_channels, out_channels):

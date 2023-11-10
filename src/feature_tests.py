@@ -16,7 +16,8 @@ JAVA_METHOD_TO_PYTHON_METHOD = {
     "childStatusComputeSlice" : ChildNodeState,
     "uncontrollableComputeSlice" : UncontrollableNeighborhood,
     "exploredComputeSlice" : ExploredStateChild,
-    "justExploredComputeSlice" : IsLastExpanded
+    "justExploredComputeSlice" : IsLastExpanded,
+    "childDeadlockComputeSlice": ChildDeadlock,
 }
 JAVA_METHOD_TO_PYTHON_METHOD = bidict(JAVA_METHOD_TO_PYTHON_METHOD)
 def test_feature_on_problem(java_feature_name : str,problem,n,k,post_mortem_debug):

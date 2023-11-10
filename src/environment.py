@@ -1,8 +1,20 @@
 from extractor import *
 from composition import CompositionGraph
 from features import *
+
+class EnvironmentRefactored:
+    def __init__(self, contexts : CompositionGraph, normalize_reward : bool = False):
+        """Environment base class.
+            TODO are contexts actually part of the concept of an RL environment?
+            FIXME FeatureExtractor is not something from the environment
+            """
+        Warning("Warning: multiple contexts will stop being a list of CompositionGraphs and will start"
+                " being the union of multiple CompositionGraphs as connected components")
+        self.contexts = contexts
+        self.normalize_reward = normalize_reward
+
 class Environment:
-    def __init__(self, contexts : FeatureExtractor, normalize_reward : bool = False):
+    def __init__(self, contexts : CompositionGraph, normalize_reward : bool = False):
         """Environment base class.
             TODO are contexts actually part of the concept of an RL environment?
             FIXME FeatureExtractor is not something from the environment

@@ -175,12 +175,18 @@ if __name__=="__main__":
     enable_first_n_values(ENABLED_PYTHON_FEATURES, 9)
 
     #PAPER IMPLEMENTATION
-    train_vgae_official()
+    #train_vgae_official()
 
     breakpoint()
     #OUR IMPLEMENTATION
-    d = CompositionGraph("AT", 3, 3)
+    d = CompositionGraph("TL", 2, 2)
     d.start_composition()
+    i = 10
+    while(i): d.expand(0);i-=1;
+    fe = FeatureExtractor(d)
+    fe.frontier_feature_vectors()
+    breakpoint()
+
     d.full_composition()
 
 

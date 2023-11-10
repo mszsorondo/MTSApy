@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 
 from util import *
@@ -7,6 +9,8 @@ from replay_buffer import ReplayBuffer
 import torch
 import json
 from extractor import FeatureExtractor
+from torch.utils.tensorboard import SummaryWriter
+import datetime
 class Feature:
     def __init__(self, str_id):
         self.str_id = str_id
@@ -19,6 +23,24 @@ class Feature:
         return len(self.compute(dataset))
     def __str__(self):
         return self.str_id
+
+class DQNAgentRefactored:
+    def __init__(self, args, feature_extractor,nn_model : torch.nn.Module = None):
+        self.args = args
+        self.feature_extractor = feature_extractor
+        self.model = nn_model
+
+    def set_model(self, context : CompositionGraph, prebuilt = None):
+        #TODO Initialize a neural network Q with random weights and input dimension d_e
+        #initialize Q' as a copy of Q
+        #initialize buffer B with observations from a random policy
+        if prebuilt is not None:
+            self.model = prebuilt
+            return
+        input_size = sum([feature.get_size(context) for feature in features])
+
+
+
 
 
 class DQNAgent:
@@ -52,13 +74,8 @@ class DQNAgent:
 
         if nn_model is None: self.model = default_network(args,nfeatures) #TODO refactor this line as well
 
-    def set_model(self, features : list[Feature], context : CompositionGraph, prebuilt = None):
-        if prebuilt is not None:
-            self.model = prebuilt
-            return
-        Warning("Inferred default model should also be possible in the future")
-        raise NotImplementedError
-        input_size = sum([feature.get_size(context) for feature in features])
+
+
     def set_feature_extractor(self, composition : CompositionGraph):
         self.feature_extractor = FeatureExtractor(composition)
 
@@ -107,13 +124,20 @@ class DQNAgent:
         print("Done.")
 
     def train(self,seconds=None, max_steps=None, max_eps=None, save_freq=200000, last_obs=None,
-              early_stopping=False, save_at_end=False, results_path=None, n_agents_budget=1000):
+              early_stopping=False, save_at_end=False, results_path=None, n_agents_budget=100):
         assert self.current_training_environment is not None
         assert self.model is not None
 
+        composition = self.current_training_environment.contexts[0].composition
+        comp_info = composition.info()
+        writer = SummaryWriter(rf".runs/agent_trains/{str((comp_info))}_at_{str(datetime.datetime.now())}", \
+                               filename_suffix=f"{str((comp_info['problem'], comp_info['n'], comp_info['k']))}_at_{str(datetime.datetime.now())}")
+        writer.add_text("training data", f"{str(composition)}")
+
         session = TrainingSession(self, self.current_training_environment, seconds, max_steps, max_eps, save_freq, last_obs,
               early_stopping, save_at_end, results_path, n_agents_budget)
-        if (last_obs is None): self.current_training_environment.reset_from_copy()
+        if (last_obs is None):
+            self.current_training_environment.reset_from_copy()
 
 
         obs = self.frontier_feature_vectors_as_batch() if (last_obs is None) else last_obs
@@ -136,7 +160,8 @@ class DQNAgent:
                     session.last_steps = session.last_steps[len(session.last_steps) - self.args.n_step + 1:]
                 #TODO how is this? see Learning-Synthesis agent.batch_update
 
-                self.batch_update()
+                loss = self.batch_update()
+                writer.add_scalar("Loss", loss, self.training_steps)
             else:
                 self.update(obs, a, reward, obs2)
 
@@ -150,7 +175,12 @@ class DQNAgent:
                 session.save(self)
                 #self.save(self.current_training_environment.info, path=results_path)
                 session.n_agents_budget -= 1
-            print(session.n_agents_budget)
+
+            if self.training_steps % 10000 == 0:
+                self.target = OnnxModel(self.model)
+            self.training_steps += 1
+        writer.close()
+
 
 
     def set_training_environment(self, env: Environment):
@@ -185,12 +215,13 @@ class DQNAgent:
         if self.verbose:
             print("Batch update. Values:", rewards+values)
 
-        self.model.batch_update(np.array(action_featuress), rewards + values)
+        return self.model.batch_update(np.array(action_featuress), rewards + values)
     def update(self, obs, action, reward, obs2):
         """ Gets epsilon-greedy action using self.model """
         if self.target is not None:
             value = self.target.eval(obs2)
         else:
+
             value = self.model.eval(obs2)
 
         self.model.single_update(obs[action], value+reward)
@@ -219,9 +250,11 @@ class DQNAgent:
 class TrainingSession:
     """ TODO abstraction to be implemented in order to pause learning, transfer learning and multiple training sessions in multiple environments if needed"""
 
-    def __init__(self, agent: DQNAgent, env: Environment, seconds=None, max_steps=None, max_eps=None, save_freq=200000,
+    def __init__(self, agent: DQNAgentRefactored, env: Environment, seconds=None,
+                 max_steps=None, max_eps=None, save_freq=200000,
                  last_obs=None,
-                 early_stopping=False, save_at_end=False, results_path=None, n_agents_budget=1000):
+                 early_stopping=False, save_at_end=False, results_path=None,
+                 n_agents_budget=1000):
 
         if agent.training_start is None:
             agent.training_start = time.time()
@@ -244,7 +277,29 @@ class TrainingSession:
         print("Warning: self.model being overwritten by hand, remember to refactor")
         self.last_steps = []
 
+    def run(self):
+        self.agent.set_model(self.env)
+        self.env.reset()
+        while(self.not_finished()):
+            obs = self.agent.observe(self.env)
+            action_index = self.agent.get_action_based_on_last_observation()
+            s_t_1 = self.env.expand_and_propagate(action_index)
+            self.agent.add_experience(s_t_1)
+            self.agent.experience_replay()
 
+    def run_imperative(self, E = ("AT",2,2), T=0):
+        Env = CompositionGraph(E[0], E[1], E[2]).start_composition(no_tau=True)
+        feature_extractor = FeatureExtractor(Env)
+        Q = default_network(n_features = feature_extractor.get_transition_features_size())
+        Qp = copy.deepcopy(Q)
+        B = ReplayBuffer(10000)
+
+        #self.random
+
+        S0 = Env.reset
+        for i in range(T):
+            pass
+            #at
     def pause(self):
         raise NotImplementedError
 

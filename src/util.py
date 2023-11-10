@@ -118,6 +118,7 @@ class TorchModel(Model):
 
         self.losses.append(loss.item())
         self.has_learned_something = True
+        return loss
 
     def nfeatures(self):
         return self.nfeatures

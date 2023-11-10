@@ -6,7 +6,7 @@ from util import remove_indices as util_remove_indices
 from features import *
 
 LEARNING_SYNTHESIS_BENCHMARK_FEATURES = [EventLabel, StateLabel, Controllable, MarkedSourceAndSinkStates, CurrentPhase,
-                                         ChildNodeState, UncontrollableNeighborhood, ExploredStateChild, IsLastExpanded]
+                                         ChildNodeState, UncontrollableNeighborhood, ExploredStateChild, IsLastExpanded, ChildDeadlock]
 class FeatureExtractor:
     """class used to get Composition information, usable as hand-crafted features
         Design:
@@ -37,7 +37,10 @@ class FeatureExtractor:
     def extract(self, transition, state)-> list[float]:
         res = []
         for feature in self._feature_classes:
-            if self.includes(feature): res += feature.compute(state=state, transition=transition)
+            if self.includes(feature):
+                res += feature.compute(state=state, transition=transition)
+                print(feature, len(feature.compute(state=state, transition=transition)))
+        breakpoint()
         return res
 
     def _set_transition_type_bit(self, feature_vec_slice, transition):

@@ -71,7 +71,7 @@ class CompositionGraph(nx.MultiDiGraph):
 
     def reset_from_copy(self):
         return self.__class__(self._problem, self._n, self._k).start_composition()
-    def start_composition(self, mtsa_version_path = 'mtsa.jar', no_tau=False):
+    def start_composition(self, mtsa_version_path = 'mtsa.jar', no_tau=True):
         #TODO more elegant tau removal
         assert(self._initial_state is None)
         if not jpype.isJVMStarted(): jpype.startJVM(classpath=[mtsa_version_path])
