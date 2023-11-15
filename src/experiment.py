@@ -63,7 +63,8 @@ class RLTrainingExperiment(TrainingExperiment):
                          save_freq=self.args.save_freq,
                          save_at_end=True,
                          early_stopping=self.args.early_stopping,
-                         results_path=self.results_path + self.add_nk())
+                         results_path=self.results_path + self.add_nk(),
+                         )
 
         with open(self.results_path + "training_data.pkl", "wb") as f:
             #FIXME info dropped from saved tuple (see Learning-synthesis)
@@ -84,12 +85,16 @@ class RLTrainingExperiment(TrainingExperiment):
     def __str__(self):
         raise NotImplementedError
 
-
+def debug_graph_inference():
+    tcg = TrainingCompositionGraph("AT",2,2)
+    tcg.start_composition()
+    for i in range(4):
+        tcg.expand(0)
+    breakpoint()
 
 if __name__ == "__main__":
-
-    problems = ["AT"]
+    debug_graph_inference()
+    problems = ["AT","TL","BW","CM","DP","TA"]
     for problem in problems:
         exp = RLTrainingExperiment(parse_args(), problem, (2,2))
         exp.run()
-    i = 0

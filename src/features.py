@@ -86,6 +86,12 @@ class RandomOneHotNodeFeature(NodeFeature):
     def compute(cls, state: CompositionGraph, node, size=300):
         return [float(i) for i in (np.random.rand(size)>=0.5)]
 
+class GAEEmbedding(NodeFeature):
+    def __init__(self, gae : nn.Module):
+        self.gae = gae
+
+    def compute(cls, state: CompositionGraph, node):
+        raise NotImplementedError
 class EventLabel(TransitionFeature):
 
     @classmethod
@@ -170,6 +176,7 @@ class ChildDeadlock(TransitionFeature):
     @classmethod
     def compute(cls, state : CompositionGraph, transition):
         return [float(transition.child is not None and len(transition.child.getTransitions()) == 0)]
+
 
 class GCNEncoder(torch.nn.Module):
     def __init__(self, in_channels, out_channels):

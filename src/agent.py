@@ -3,7 +3,7 @@ import copy
 import numpy as np
 
 from util import *
-from composition import CompositionGraph
+from composition import CompositionGraph, TrainingCompositionGraph
 from environment import Environment
 from replay_buffer import ReplayBuffer
 import torch
@@ -130,7 +130,7 @@ class DQNAgent:
 
         composition = self.current_training_environment.contexts[0].composition
         comp_info = composition.info()
-        writer = SummaryWriter(rf".runs/agent_trains/{str((comp_info))}_at_{str(datetime.datetime.now())}", \
+        writer = SummaryWriter(rf".runs/epsilon_agent_trains/{str((comp_info))}_at_{str(datetime.datetime.now())}", \
                                filename_suffix=f"{str((comp_info['problem'], comp_info['n'], comp_info['k']))}_at_{str(datetime.datetime.now())}")
         writer.add_text("training data", f"{str(composition)}")
 
@@ -139,14 +139,13 @@ class DQNAgent:
         if (last_obs is None):
             self.current_training_environment.reset_from_copy()
 
-
+        current_reward, reward_list, episode_number = 0, [], 1
         obs = self.frontier_feature_vectors_as_batch() if (last_obs is None) else last_obs
-        breakpoint()
         while(session.not_finished()):
             a = self.get_action(obs, self.epsilon)
             session.last_steps.append(obs[a])
             obs2, reward, done, step_info = self.current_training_environment.step(a)
-
+            current_reward -= 1
             #TODO refactor with DQN class and DQNExperienceReplay class or decorator with ex                                                                        perience replay or similar
             #also modifying session.last_steps this way looks horrible
             if self.args.exp_replay:
@@ -171,6 +170,10 @@ class DQNAgent:
                 self.current_training_environment.reset_from_copy()
                 obs = self.frontier_feature_vectors_as_batch()
 
+                reward_list.append(current_reward)
+                current_reward = 0
+                if (episode_number % 10 == 0): writer.add_scalar("Reward", sum(reward_list[-10:]) / 10, episode_number)
+                episode_number += 1
             if self.training_steps % save_freq == 0 and results_path is not None:
                 session.save(self)
                 #self.save(self.current_training_environment.info, path=results_path)
@@ -179,6 +182,12 @@ class DQNAgent:
             if self.training_steps % 10000 == 0:
                 self.target = OnnxModel(self.model)
             self.training_steps += 1
+
+            session.steps+=1
+
+            if self.epsilon>self.args.last_epsilon+ 1e-10:
+                writer.add_scalar("epsilon", self.epsilon, self.training_steps)
+                self.epsilon -= session.epsilon_step
         writer.close()
 
 
@@ -274,6 +283,7 @@ class TrainingSession:
 
         self.epsilon_step = (agent.args.first_epsilon - agent.args.last_epsilon)
         self.epsilon_step /= agent.args.epsilon_decay_steps
+
         print("Warning: self.model being overwritten by hand, remember to refactor")
         self.last_steps = []
 
@@ -322,7 +332,7 @@ class TrainingSession:
         agent.save_idx += 1
 
     def not_finished(self):
-        return self.n_agents_budget>0
+        return self.n_agents_budget>0 and self.max_steps>self.steps
 
     def compute_final_info(self, info):
         instance = (self.env.info["problem"], self.env.info["n"], self.env.info["k"])

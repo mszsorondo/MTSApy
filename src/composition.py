@@ -1,7 +1,11 @@
 import copy
 import random
 import warnings
+
+import dgl
 import networkx as nx
+import torch
+
 from util import remove_indices as util_remove_indices
 from util import *
 
@@ -130,20 +134,6 @@ class CompositionGraph(nx.MultiDiGraph):
 
     def info(self):
         return {"n":self._n,"k":self._k,"problem":self._problem}
-    def explored(self, transition):
-        """
-        TODO
-        Whether a transition from s or s ′ has
-            already been explored.
-
-        """
-        raise NotImplementedError
-    def last_expanded(self, transition):
-        """
-        TODO
-        Whether s is the last expanded state in h
-            (outgoing or incoming)."""
-        raise NotImplementedError
 
     def finished(self):
         return self._javaEnv.isFinished()
@@ -168,5 +158,27 @@ class CompositionGraph(nx.MultiDiGraph):
         print(k)
     """
 
+
+class TrainingCompositionGraph(CompositionGraph):
+    def __init__(self, problem, n, k):
+        super().__init__(problem, n, k)
+        self.inference_graph =dgl.graph(data=(torch.tensor([1,2,3]),torch.tensor([1,2,3])))
+        self.next_node_index = 1
+        self.composition_int_identifier = bidict()
+
+
+    def expand(self, idx):
+        assert(not self._javaEnv.isFinished()), "Invalid expansion, composition is already solved"
+        assert (idx<self.getFrontierSize() and idx>=0), "Invalid index"
+
+        if self.getFrontierSize()>0:
+            self._javaEnv.expandAction(idx) #TODO check this is the same index as in the python frontier list
+        else: return
+        new_state_action = self.getLastExpanded()
+        controllability, label = self.getLastExpanded().action.isControllable(), self.getLastExpanded().action.toString()
+        self.add_node(self.last_expansion_child_state())
+        self.add_edge(new_state_action.state, self.last_expansion_child_state(), controllability=controllability, label=label, action_with_features = new_state_action)
+        self._expansion_order.append(self.getLastExpanded())
+        breakpoint()
 
 

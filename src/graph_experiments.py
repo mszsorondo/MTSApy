@@ -143,7 +143,6 @@ def composition_to_nx(self, debug_graph=None, to_undirected=True, selected_trans
             #selected_actions_to_inspect.append((s.toString(),t.toString(),CG[s][t]["label"]))
         for edge in CG[s][t].values(): edge["features"] = features
 
-
     D = CG.to_pure_nx()
 
     G = CG.copy_with_nodes_as_ints(D)
@@ -175,7 +174,7 @@ if __name__=="__main__":
     enable_first_n_values(ENABLED_PYTHON_FEATURES, 9)
 
     #PAPER IMPLEMENTATION
-    #train_vgae_official()
+    train_vgae_official()
 
     breakpoint()
     #OUR IMPLEMENTATION
