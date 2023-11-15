@@ -3,7 +3,7 @@ import random
 from util import *
 from torch_geometric.nn import GCNConv, Sequential
 from torch import nn
-from composition import CompositionGraph, util_remove_indices
+from composition import CompositionGraph, util_remove_indices, TrainingCompositionGraph
 class Feature:
     def __call__(cls, data):
         raise NotImplementedError
@@ -86,12 +86,27 @@ class RandomOneHotNodeFeature(NodeFeature):
     def compute(cls, state: CompositionGraph, node, size=300):
         return [float(i) for i in (np.random.rand(size)>=0.5)]
 
-class GAEEmbedding(NodeFeature):
+class GAEEmbeddings(GlobalFeature):
     def __init__(self, gae : nn.Module):
         self.gae = gae
 
-    def compute(cls, state: CompositionGraph, node):
+    def compute(self, state: TrainingCompositionGraph):
+        assert state.__class__ == TrainingCompositionGraph
+        res = dict()
+        self.set_static_node_features(state)
+        Warning("add only updated features to DGL dict and perform forward pass")
         raise NotImplementedError
+        return res
+    def set_static_node_features(self, state: TrainingCompositionGraph):
+        #FIXME refactor this
+        for node in state.nodes:
+            in_label_ohe = LabelsOHE.compute(state, node, dir="in")
+            out_label_ohe = LabelsOHE.compute(state, node, dir="out")
+            marked =  MarkedState.compute(state, node)
+            state.nodes[node]["features"] = in_label_ohe + out_label_ohe + marked
+            state.nodes[node]["compostate"] = node.toString()
+            res[state.composition_int_identifier[node[0]]] = node[1]["features"]
+
 class EventLabel(TransitionFeature):
 
     @classmethod

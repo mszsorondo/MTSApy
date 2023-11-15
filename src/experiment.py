@@ -86,13 +86,20 @@ class RLTrainingExperiment(TrainingExperiment):
         raise NotImplementedError
 
 def debug_graph_inference():
+    from features import GAEEmbeddings
     tcg = TrainingCompositionGraph("AT",2,2)
+    e = GAEEmbeddings(None)
     tcg.start_composition()
     for i in range(4):
         tcg.expand(0)
+        e.compute(tcg)
+
+
+        breakpoint()
     breakpoint()
 
 if __name__ == "__main__":
+
     debug_graph_inference()
     problems = ["AT","TL","BW","CM","DP","TA"]
     for problem in problems:

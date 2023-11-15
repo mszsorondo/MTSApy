@@ -162,7 +162,7 @@ class CompositionGraph(nx.MultiDiGraph):
 class TrainingCompositionGraph(CompositionGraph):
     def __init__(self, problem, n, k):
         super().__init__(problem, n, k)
-        self.inference_graph =dgl.graph(data=(torch.tensor([1,2,3]),torch.tensor([1,2,3])))
+        self.inference_representation = None
         self.next_node_index = 1
         self.composition_int_identifier = bidict()
 
@@ -176,9 +176,19 @@ class TrainingCompositionGraph(CompositionGraph):
         else: return
         new_state_action = self.getLastExpanded()
         controllability, label = self.getLastExpanded().action.isControllable(), self.getLastExpanded().action.toString()
-        self.add_node(self.last_expansion_child_state())
-        self.add_edge(new_state_action.state, self.last_expansion_child_state(), controllability=controllability, label=label, action_with_features = new_state_action)
+        last_expanded_state = self.last_expansion_child_state()
+        last_expanded_source = new_state_action.state
+        self.add_node(last_expanded_state)
+        self.add_edge(last_expanded_source, last_expanded_state, controllability=controllability, label=label, action_with_features = new_state_action)
         self._expansion_order.append(self.getLastExpanded())
+
+        if last_expanded_source not in self.composition_int_identifier:
+            self.composition_int_identifier[last_expanded_source]=self.next_node_index
+            self.next_node_index+=1
+        if last_expanded_state not in self.composition_int_identifier:
+            self.composition_int_identifier[last_expanded_state] = self.next_node_index
+            self.next_node_index += 1
         breakpoint()
-
-
+        if self.inference_representation is None:
+            self.inference_representation = dgl.graph(data=(torch.tensor([self.composition_int_identifier[last_expanded_source]]), torch.tensor([self.composition_int_identifier[last_expanded_state]])))
+        else: self.inference_representation.add_edges(self.composition_int_identifier[last_expanded_source], self.composition_int_identifier[last_expanded_state], )
