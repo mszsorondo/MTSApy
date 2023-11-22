@@ -76,6 +76,7 @@ def train_vgae_official(file_name = "vgae.pt"):
         data, device = da.composition_to_nx()
 
         dgl_data = to_dgl(data)
+        breakpoint()
         best_model = train_vgae.dgl_main(dgl_data) #TODO add parameters: graph, epochs, etc etc
         Warning("I'm not so sure the parameters are correctly loaded or if the parameters are from the best model (watch out running mean and variance etc)")
         torch.save(best_model, problem + file_name)

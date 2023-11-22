@@ -163,7 +163,7 @@ class TrainingCompositionGraph(CompositionGraph):
     def __init__(self, problem, n, k):
         super().__init__(problem, n, k)
         self.inference_representation = None
-        self.next_node_index = 1
+        self.next_node_index = 0
         self.composition_int_identifier = bidict()
 
 
@@ -188,7 +188,7 @@ class TrainingCompositionGraph(CompositionGraph):
         if last_expanded_state not in self.composition_int_identifier:
             self.composition_int_identifier[last_expanded_state] = self.next_node_index
             self.next_node_index += 1
-        breakpoint()
+
         if self.inference_representation is None:
             self.inference_representation = dgl.graph(data=(torch.tensor([self.composition_int_identifier[last_expanded_source]]), torch.tensor([self.composition_int_identifier[last_expanded_state]])))
         else: self.inference_representation.add_edges(self.composition_int_identifier[last_expanded_source], self.composition_int_identifier[last_expanded_state], )

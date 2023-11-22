@@ -1,4 +1,7 @@
 import random
+from collections import OrderedDict
+
+import torch
 
 from util import *
 from torch_geometric.nn import GCNConv, Sequential
@@ -92,21 +95,25 @@ class GAEEmbeddings(GlobalFeature):
 
     def compute(self, state: TrainingCompositionGraph):
         assert state.__class__ == TrainingCompositionGraph
-        res = dict()
-        self.set_static_node_features(state)
+        nodewise_feature_dict = OrderedDict()
+
+        self.set_static_node_features(state,nodewise_feature_dict)
         Warning("add only updated features to DGL dict and perform forward pass")
-        raise NotImplementedError
-        return res
-    def set_static_node_features(self, state: TrainingCompositionGraph):
+        breakpoint()
+        state.inference_representation.ndata["feat"] = torch.tensor([f for f in nodewise_feature_dict.values()])
+
+    def set_static_node_features(self, state: TrainingCompositionGraph, res):
         #FIXME refactor this
-        for node in state.nodes:
+        for node,node_dict in state.nodes(data=True):
             in_label_ohe = LabelsOHE.compute(state, node, dir="in")
             out_label_ohe = LabelsOHE.compute(state, node, dir="out")
             marked =  MarkedState.compute(state, node)
-            state.nodes[node]["features"] = in_label_ohe + out_label_ohe + marked
-            state.nodes[node]["compostate"] = node.toString()
-            res[state.composition_int_identifier[node[0]]] = node[1]["features"]
+            node_dict["features"] = in_label_ohe + out_label_ohe + marked
+            node_dict["compostate"] = node.toString()
 
+            res[state.composition_int_identifier[node]] = node_dict["features"]
+    def update_static_node_features(self):
+        raise NotImplementedError
 class EventLabel(TransitionFeature):
 
     @classmethod

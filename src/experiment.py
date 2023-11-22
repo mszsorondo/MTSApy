@@ -90,12 +90,15 @@ def debug_graph_inference():
     tcg = TrainingCompositionGraph("AT",2,2)
     e = GAEEmbeddings(None)
     tcg.start_composition()
-    for i in range(4):
+    res = None
+    for i in range(16):
         tcg.expand(0)
-        e.compute(tcg)
+        res = e.compute(tcg)
 
 
-        breakpoint()
+
+
+        if i==15: breakpoint()
     breakpoint()
 
 if __name__ == "__main__":
