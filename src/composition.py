@@ -163,10 +163,15 @@ class TrainingCompositionGraph(CompositionGraph):
     def __init__(self, problem, n, k):
         super().__init__(problem, n, k)
         self.inference_representation = None
-        self.next_node_index = 0
+        self.next_node_index = 1
         self.composition_int_identifier = bidict()
 
-
+    def start_composition(self, mtsa_version_path='mtsa.jar', no_tau=True):
+        super().start_composition(mtsa_version_path,no_tau)
+        self.composition_int_identifier[self._initial_state] = 0
+        self.inference_representation = dgl.graph(([], []))
+        self.inference_representation.add_nodes(1)
+        return self
     def expand(self, idx):
         assert(not self._javaEnv.isFinished()), "Invalid expansion, composition is already solved"
         assert (idx<self.getFrontierSize() and idx>=0), "Invalid index"

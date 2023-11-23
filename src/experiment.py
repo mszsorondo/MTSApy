@@ -2,6 +2,8 @@ from extractor import FeatureExtractor
 from agent import *
 from agent import TrainingSession
 from environment import EnvironmentRefactored
+from features import *
+
 class Experiment:
     def __init__(self, args : argparse.Namespace, problem : str):
         self.args = args
@@ -21,7 +23,8 @@ class TrainingExperiment(Experiment):
 class RLTrainingExperiment(TrainingExperiment):
     def __init__(self, args : argparse.Namespace, problem : str, context : tuple[int,int], ):
         super().__init__(args, problem, context)
-        self.env = Environment([FeatureExtractor(CompositionGraph(p, n, k).start_composition()) for p, n, k in self.training_contexts])
+
+        self.env = Environment([FeatureExtractor(TrainingCompositionGraph(p, n, k).start_composition(), global_feature_classes=[GAEEmbeddings(problem=p)]) for p, n, k in self.training_contexts])
         self.agent = self.init_agent()
         self.args = args
 
@@ -85,12 +88,20 @@ class RLTrainingExperiment(TrainingExperiment):
     def __str__(self):
         raise NotImplementedError
 
-def debug_graph_inference():
+def debug_graph_inference(problem="AT"):
     from features import GAEEmbeddings
-    tcg = TrainingCompositionGraph("AT",2,2)
-    e = GAEEmbeddings(None)
+    import sys
+    sys.path.append("/home/marco/Desktop/dgl/dgl/examples/pytorch/vgae")
+    import train_vgae
+    import model as mdl
+    tcg = TrainingCompositionGraph(problem,2,2)
+    breakpoint()
+
+
+    e = GAEEmbeddings(problem=problem)
     tcg.start_composition()
     res = None
+
     for i in range(16):
         tcg.expand(0)
         res = e.compute(tcg)
@@ -103,8 +114,8 @@ def debug_graph_inference():
 
 if __name__ == "__main__":
 
-    debug_graph_inference()
-    problems = ["AT","TL","BW","CM","DP","TA"]
+    #debug_graph_inference()
+    problems = ["AT","DP","TA"]
     for problem in problems:
         exp = RLTrainingExperiment(parse_args(), problem, (2,2))
         exp.run()

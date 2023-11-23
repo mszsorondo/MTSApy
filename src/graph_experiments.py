@@ -66,7 +66,7 @@ def train_vgae_official(file_name = "vgae.pt"):
     import train_vgae
     import dgl
     from torch_geometric.utils import to_dgl
-    for problem in ["AT", "DP","TA", "TL", "BW", "CM"]:
+    for problem in ["AT", "DP","TA", "BW", "CM","TL"]:
         d = CompositionGraph(problem, 2, 2)
         d.start_composition()
         d.full_composition()
@@ -76,10 +76,10 @@ def train_vgae_official(file_name = "vgae.pt"):
         data, device = da.composition_to_nx()
 
         dgl_data = to_dgl(data)
-        breakpoint()
-        best_model = train_vgae.dgl_main(dgl_data) #TODO add parameters: graph, epochs, etc etc
+        dgl_data.problem = problem
+        train_vgae.dgl_main(dgl_data) #TODO add parameters: graph, epochs, etc etc
         Warning("I'm not so sure the parameters are correctly loaded or if the parameters are from the best model (watch out running mean and variance etc)")
-        torch.save(best_model, problem + file_name)
+
 
 def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epochs = 5000, debug_graph = None):
     Warning("This function will be replaced by the official VGAE implementation from DGL")

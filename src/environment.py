@@ -25,7 +25,7 @@ class Environment:
         self.normalize_reward = normalize_reward
 
     def reset_from_copy(self):
-        self.contexts = [FeatureExtractor(context.composition.reset_from_copy()) for context in self.contexts]
+        self.contexts = [FeatureExtractor(context.composition.reset_from_copy(), global_feature_classes=[GAEEmbeddings(problem=context.composition._problem)]) for context in self.contexts]
         return self
 
     def get_number_of_contexts(self):

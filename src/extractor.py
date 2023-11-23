@@ -7,6 +7,7 @@ from features import *
 
 LEARNING_SYNTHESIS_BENCHMARK_FEATURES = [EventLabel, StateLabel, Controllable, MarkedSourceAndSinkStates, CurrentPhase,
                                          ChildNodeState, UncontrollableNeighborhood, ExploredStateChild, IsLastExpanded, ChildDeadlock]
+
 class FeatureExtractor:
     """class used to get Composition information, usable as hand-crafted features
         Design:
@@ -14,7 +15,7 @@ class FeatureExtractor:
         methods: .extract(featureClass, from = composition) .phi(composition)
     """
 
-    def __init__(self, composition, enabled_features_dict = None, feature_classes = LEARNING_SYNTHESIS_BENCHMARK_FEATURES):
+    def __init__(self, composition, transition_feature_classes = LEARNING_SYNTHESIS_BENCHMARK_FEATURES, global_feature_classes = [], node_feature_classes = []):
         #FIXME composition should be a parameter of phi, since FeatureExctractor works ...
         # for any context independently UNLESS there are trained features
         # in general, composition should be completely decoupled from extractor (passed always as a parameter)
@@ -26,21 +27,26 @@ class FeatureExtractor:
         self._fast_no_indices_alphabet_dict = dict()
         for i in range(len(self._no_indices_alphabet)): self._fast_no_indices_alphabet_dict[self._no_indices_alphabet[i]]=i
         self._fast_no_indices_alphabet_dict = bidict(self._fast_no_indices_alphabet_dict)
-        self._feature_classes = feature_classes
-        self._enabled_feature_classes = enabled_features_dict if enabled_features_dict is not None else {feature : True for feature in self._feature_classes}
-        self._global_feature_classes = [feature_cls for feature_cls in self._feature_classes if feature_cls.__class__ == GlobalFeature]  #
-        self._node_feature_classes = [feature_cls for feature_cls in self._feature_classes if feature_cls.__class__ == NodeFeature]
+
+
+        self._global_feature_classes = global_feature_classes
+        self._transition_feature_classes = transition_feature_classes
+        self._node_feature_classes = node_feature_classes
+        self._feature_classes = self._global_feature_classes + self._transition_feature_classes + self._node_feature_classes
     def phi(self):
         #TODO make this function a parameter
         return self.frontier_feature_vectors()
 
     def extract(self, transition, state)-> list[float]:
         res = []
-        for feature in self._feature_classes:
-            if self.includes(feature):
-                res += feature.compute(state=state, transition=transition)
+        for feature in self._transition_feature_classes:
+            res += feature.compute(state=state, transition=transition)
         return res
-
+    def extract_global_features(self, state):
+        res = []
+        for feature in self._global_feature_classes:
+            res += feature.compute(state)
+        return res
     def _set_transition_type_bit(self, feature_vec_slice, transition):
         no_idx_label = self.remove_indices(transition.toString())
         feature_vec_slice_pos = self._fast_no_indices_alphabet_dict[no_idx_label]
@@ -50,8 +56,8 @@ class FeatureExtractor:
     def remove_indices(self, transition_label : str):
         util_remove_indices(transition_label)
     def get_transition_features_size(self):
-        if(len(self.composition.getFrontier())): return len(self.extract(self.composition.getFrontier()[0], self.composition))
-        elif (len(self.composition.getNonFrontier())): return len(self.extract(self.composition.getNonFrontier()[0], self.composition))
+        if(len(self.composition.getFrontier())): return len(self.extract(self.composition.getFrontier()[0], self.composition)) + sum([feature.size for feature in self._global_feature_classes])
+        elif (len(self.composition.getNonFrontier())): return len(self.extract(self.composition.getNonFrontier()[0], self.composition)) + sum([feature.size for feature in self._global_feature_classes])
         else: raise ValueError
 
     def includes(self, feature):
@@ -61,10 +67,14 @@ class FeatureExtractor:
         return {(trans.state,trans.child) : self.extract(trans, self.composition) for trans in self.composition.getNonFrontier()}
 
     def frontier_feature_vectors(self) -> dict[tuple,list[float]]:
+        res = dict()
         #TODO you can parallelize this (GPU etc)
-        #for trans in self.composition.getFrontier():
+        node_features = self.extract_global_features(self.composition)
+        for trans in list(self.composition.getFrontier()):
+            source_state_idx = self.composition.composition_int_identifier[trans.state]
+            res.update({(trans.state,trans.action) : self.extract(trans, self.composition) + node_features[source_state_idx].tolist()})
 
-        return {(trans.state,trans.action) : self.extract(trans, self.composition) for trans in self.composition.getFrontier()}
+        return res
     def frontier_feature_vectors_as_batch(self):
         return np.array(list(self.frontier_feature_vectors().values()), dtype=np.float32)
     def set_static_node_features(self):

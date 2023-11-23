@@ -11,6 +11,7 @@ import json
 from extractor import FeatureExtractor
 from torch.utils.tensorboard import SummaryWriter
 import datetime
+from features import GAEEmbeddings
 class Feature:
     def __init__(self, str_id):
         self.str_id = str_id
@@ -77,7 +78,7 @@ class DQNAgent:
 
 
     def set_feature_extractor(self, composition : CompositionGraph):
-        self.feature_extractor = FeatureExtractor(composition)
+        self.feature_extractor = FeatureExtractor(composition, global_feature_classes=[GAEEmbeddings(problem=composition._problem)])
 
     def _get_experience_from_random_policy(self, env : Environment, total_steps, nstep=1):
         """ TODO it is not ok for an agent to restart and execute the steps of the environment, refactor this
@@ -130,7 +131,7 @@ class DQNAgent:
 
         composition = self.current_training_environment.contexts[0].composition
         comp_info = composition.info()
-        writer = SummaryWriter(rf".runs/epsilon_agent_trains/{str((comp_info))}_at_{str(datetime.datetime.now())}", \
+        writer = SummaryWriter(rf".runs/gae_agent_trains/{str((comp_info))}_at_{str(datetime.datetime.now())}", \
                                filename_suffix=f"{str((comp_info['problem'], comp_info['n'], comp_info['k']))}_at_{str(datetime.datetime.now())}")
         writer.add_text("training data", f"{str(composition)}")
 

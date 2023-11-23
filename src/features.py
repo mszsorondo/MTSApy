@@ -28,13 +28,6 @@ class GlobalFeature(Feature):
     def __call__(cls, data):
         return cls.compute(data)
 
-class AutoencoderEmbeddings(GlobalFeature):
-
-    @classmethod
-    def compute(cls, data : CompositionGraph) -> dict:
-        raise NotImplementedError
-    def train(self, data : CompositionGraph, static_feature_extractor) -> torch.nn.Module:
-        raise NotImplementedError
 class Node2Vec(GlobalFeature):
     def compute(cls, data : CompositionGraph) -> dict:
         raise NotImplementedError
@@ -90,17 +83,38 @@ class RandomOneHotNodeFeature(NodeFeature):
         return [float(i) for i in (np.random.rand(size)>=0.5)]
 
 class GAEEmbeddings(GlobalFeature):
-    def __init__(self, gae : nn.Module):
-        self.gae = gae
+    def __init__(self, gae : nn.Module = None, problem = None):
+        if gae is not None: self.gae = gae
+        else:
+            import sys
+            sys.path.append("/home/marco/Desktop/dgl/dgl/examples/pytorch/vgae")
+            import model as mdl
+            assert problem is not None
+            with open(f"/home/marco/Desktop/MTSApy/src/features/VGAE_args_{problem}.txt", "r") as f:
+                in_dim = int(f.readline())
+                hidden1 = int(f.readline())
+                hidden2 = int(f.readline())
+
+            graphnet = mdl.VGAEModel(in_dim, hidden1, hidden2)
+            graphnet.load_state_dict(torch.load(f"/home/marco/Desktop/MTSApy/src/features/VGAE_{problem}.pth"))
+
+            graphnet.eval()
+            self.gae = graphnet
+        self.memory = None
+        self.size = hidden2
 
     def compute(self, state: TrainingCompositionGraph):
         assert state.__class__ == TrainingCompositionGraph
         nodewise_feature_dict = OrderedDict()
-
         self.set_static_node_features(state,nodewise_feature_dict)
         Warning("add only updated features to DGL dict and perform forward pass")
-        breakpoint()
+
         state.inference_representation.ndata["feat"] = torch.tensor([f for f in nodewise_feature_dict.values()])
+        feats = state.inference_representation.ndata.pop("feat") #TODO set device etc
+        with torch.no_grad():
+            embeddings = self.gae.encoder(state.inference_representation, feats)
+        self.memory = embeddings
+        return embeddings
 
     def set_static_node_features(self, state: TrainingCompositionGraph, res):
         #FIXME refactor this
@@ -112,6 +126,7 @@ class GAEEmbeddings(GlobalFeature):
             node_dict["compostate"] = node.toString()
 
             res[state.composition_int_identifier[node]] = node_dict["features"]
+
     def update_static_node_features(self):
         raise NotImplementedError
 class EventLabel(TransitionFeature):
@@ -153,6 +168,8 @@ class MarkedState(NodeFeature):
     @classmethod
     def compute(cls, state: CompositionGraph, node):
         return [float(node.marked)]
+    def size(self):
+        return 1
 
 class CurrentPhase(TransitionFeature):
     @classmethod
