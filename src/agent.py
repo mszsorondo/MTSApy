@@ -38,7 +38,7 @@ class DQNAgentRefactored:
         if prebuilt is not None:
             self.model = prebuilt
             return
-        input_size = sum([feature.get_size(context) for feature in features])
+        #input_size = sum([feature.get_size(context) for feature in features])
 
 
 
@@ -142,7 +142,7 @@ class DQNAgent:
 
         current_reward, reward_list, episode_number = 0, [], 1
         obs = self.frontier_feature_vectors_as_batch() if (last_obs is None) else last_obs
-        while(session.not_finished()):
+        while(not session.finished()):
             a = self.get_action(obs, self.epsilon)
             session.last_steps.append(obs[a])
             obs2, reward, done, step_info = self.current_training_environment.step(a)
@@ -176,7 +176,7 @@ class DQNAgent:
                 if (episode_number % 10 == 0): writer.add_scalar("Reward", sum(reward_list[-10:]) / 10, episode_number)
                 episode_number += 1
             if self.training_steps % save_freq == 0 and results_path is not None:
-                session.save(self)
+                session.save_as_torch(self)
                 #self.save(self.current_training_environment.info, path=results_path)
                 session.n_agents_budget -= 1
 
@@ -238,21 +238,6 @@ class DQNAgent:
 
         if self.verbose:
             print("Single update. Value:", value+reward)
-    def save(self, env_info, path):
-        os.makedirs(path, exist_ok=True)
-        OnnxModel(self.model).save(path + "/" + str(self.save_idx))
-
-        with open(path + "/" + str(self.save_idx) + ".json", "w") as f:
-            info = {
-                "training time": time.time() - self.training_start,
-                "training steps": self.training_steps,
-            }
-            info.update(vars(self.args))
-            info.update(env_info)
-            json.dump(info, f)
-
-        print("Agent", self.save_idx, "saved. Training time:", time.time() - self.training_start, "Training steps:", self.training_steps)
-        self.save_idx += 1
 
 
 
@@ -281,7 +266,7 @@ class TrainingSession:
         self.save_at_end=save_at_end
         self.results_path=results_path
         self.n_agents_budget=n_agents_budget
-
+        self.converged = False
         self.epsilon_step = (agent.args.first_epsilon - agent.args.last_epsilon)
         self.epsilon_step /= agent.args.epsilon_decay_steps
 
@@ -331,9 +316,33 @@ class TrainingSession:
         print("Agent", agent.save_idx, "saved. Training time:", time.time() - agent.training_start, "Training steps:",
               agent.training_steps)
         agent.save_idx += 1
+    def save_as_torch(self, agent):
+        os.makedirs(self.results_path, exist_ok=True)
+        agent.model.save(self.results_path  + "/" + str(agent.save_idx))
 
-    def not_finished(self):
-        return self.n_agents_budget>0 and self.max_steps>self.steps
+        with open(self.results_path + "/" + str(agent.save_idx) + ".json", "w") as f:
+            info = {
+                "training time": time.time() - agent.training_start,
+                "training steps": agent.training_steps,
+            }
+            info.update(vars(agent.args))
+            info.update(self.env.contexts[0].composition.info())
+            info.update({'expansion_budget_exceeded': 'false'})
+            json.dump(info, f)
+
+        print("Agent", agent.save_idx, "saved. Training time:", time.time() - agent.training_start, "Training steps:",
+              agent.training_steps)
+        agent.save_idx += 1
+
+    def finished(self):
+        cond1 = self.max_steps>self.steps and not self.early_stopping
+        cond2 = self.n_agents_budget>0
+        cond3 = self.max_eps is not None and self.eps>=self.max_eps
+        if(self.max_steps is not None and self.training_steps > self.max_steps
+                and (self.training_steps - self.last_best) / self.training_steps > 0.33):
+            self.converged=True
+        cond4 = self.early_stopping and self.converged
+        return cond1 or cond2 or cond3 or cond4
 
     def compute_final_info(self, info):
         instance = (self.env.info["problem"], self.env.info["n"], self.env.info["k"])

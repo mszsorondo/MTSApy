@@ -141,9 +141,12 @@ class TorchModel(Model):
                           dynamic_axes={'X': {0: 'batch_size'},  # variable length axes
                                         'output': {0: 'batch_size'}})
         return onnx.load("tmp.onnx"), InferenceSession("tmp.onnx")
+    def save(self, path):
+        torch.save(self.model,path + ".pt")
 
 
 def parse_args():
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--problems", type=str,
@@ -289,8 +292,8 @@ class NeuralNetwork(torch.nn.Module):
         raise NotImplementedError
 
 
-def default_network(args, nfeatures, nn_size=[20]):
-    nn = NeuralNetwork(nfeatures, nn_size).to("cpu")
+def default_network(args, nfeatures, nn_size=[20], net = None):
+    nn = NeuralNetwork(nfeatures, nn_size).to("cpu") if net is None else net
     nn_model = TorchModel(args, nfeatures, network=nn)
     return nn_model
 
@@ -301,5 +304,10 @@ def remove_indices(transition_label : str):
         if not c.isdigit() and c!='.': res += c
 
     return res
+def get_filenames_in_path(path):
+    filenames = []
+    if os.path.exists(path) and os.path.isdir(path):  # Check if the path exists and is a directory
+        filenames = [os.path.basename(f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+    return filenames
 
 LABELS_PATH = "./fsp/labels"

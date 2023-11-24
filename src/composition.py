@@ -60,10 +60,13 @@ class CompositionGraph(nx.MultiDiGraph):
         """
         assert self._javaEnv is not None and len(self.edges())==0, "You already started an expansion"
         self._javaEnv.set_initial_as_none()
+        i = 0
         while(self.getFrontierSize()>0):
 
             self._javaEnv.set_initial_as_none()
-            self.expand(0)
+
+            self.expandNoSolution(0)
+            i+=1 ; print(i)
             nonfront = self.getNonFrontier()
             lastexp = self.getLastExpanded()
             assert lastexp.state == nonfront[len(nonfront)-1].state
@@ -114,6 +117,20 @@ class CompositionGraph(nx.MultiDiGraph):
         if self.getFrontierSize()>0:
             self._javaEnv.expandAction(idx) #TODO check this is the same index as in the python frontier list
         else: return
+
+        new_state_action = self.getLastExpanded()
+        controllability, label = self.getLastExpanded().action.isControllable(), self.getLastExpanded().action.toString()
+        self.add_node(self.last_expansion_child_state())
+        self.add_edge(new_state_action.state, self.last_expansion_child_state(), controllability=controllability, label=label, action_with_features = new_state_action)
+        self._expansion_order.append(self.getLastExpanded())
+    def expandNoSolution(self, idx):
+        assert(not self._javaEnv.isFinished()), "Invalid expansion, composition is already solved"
+        assert (idx<self.getFrontierSize() and idx>=0), "Invalid index"
+
+        if self.getFrontierSize()>0:
+            self._javaEnv.expandActionNoSolution(idx) #TODO check this is the same index as in the python frontier list
+        else: return
+
         new_state_action = self.getLastExpanded()
         controllability, label = self.getLastExpanded().action.isControllable(), self.getLastExpanded().action.toString()
         self.add_node(self.last_expansion_child_state())

@@ -1,9 +1,17 @@
+import random
+
+import numpy as np
+import torch
+
 from extractor import FeatureExtractor
 from agent import *
 from agent import TrainingSession
 from environment import EnvironmentRefactored
 from features import *
-
+def selection_debug(args):
+    exp = RLTestingExperiment(args, "/home/marco/Desktop/MTSApy/experiments/test/AT/[2, 2]/", "AT")
+    instances = [(i,k) for i in range(1,16) for k in range(1,16)]
+    exp.run(instances)
 class Experiment:
     def __init__(self, args : argparse.Namespace, problem : str):
         self.args = args
@@ -23,7 +31,7 @@ class TrainingExperiment(Experiment):
 class RLTrainingExperiment(TrainingExperiment):
     def __init__(self, args : argparse.Namespace, problem : str, context : tuple[int,int], ):
         super().__init__(args, problem, context)
-
+        breakpoint()
         self.env = Environment([FeatureExtractor(TrainingCompositionGraph(p, n, k).start_composition(), global_feature_classes=[GAEEmbeddings(problem=p)]) for p, n, k in self.training_contexts])
         self.agent = self.init_agent()
         self.args = args
@@ -88,6 +96,51 @@ class RLTrainingExperiment(TrainingExperiment):
     def __str__(self):
         raise NotImplementedError
 
+
+class RLTestingExperiment():
+    def __init__(self,args : argparse.Namespace, agents_path, problem):
+        self.args = args
+        self.agents_path = agents_path
+        self.problem = problem
+
+    def run(self, instances):
+        #agent_idxs = np.random.randint(0,min(100,len(??)))
+
+        agent_paths = [self.agents_path +"/"+ f for f in get_filenames_in_path(self.agents_path) if ".onnx" in f]
+        agent_paths = sorted(random.sample(agent_paths,min(100,len(agent_paths))))
+        n = max(instances)[0]
+        solved = [[False for _ in range(n+1)] for _ in range(n+1)]
+
+        for agent_path in agent_paths:
+            for instance in instances:
+                n,k = instance[0], instance[1]
+                if not ((n==1 or solved[n-1][k]) and (k==1 or solved[n][k-1])):
+                    continue
+                tcg = TrainingCompositionGraph(self.problem, instance[0], instance[1])
+                breakpoint()
+                env = Environment([FeatureExtractor(tcg.start_composition(),
+                                   global_feature_classes = [GAEEmbeddings(problem=self.problem)])])
+                nfeatures = env.contexts[0].get_transition_features_size()  # TODO refactor, hardcoded
+                breakpoint()
+                agent = DQNAgent(self.args, verbose=False,
+                                 nfeatures=nfeatures)
+                agent.nn_model = torch.load(agent_path)
+                breakpoint()
+                net = NeuralNetwork(nfeatures, nnsize=[20])
+                net.load_state_dict()
+                default_network(self.args,nfeatures,net=net)
+                remaining = self.args.step_2_budget
+
+                while(remaining):
+
+                    remaining-=1
+                if (remaining==0):
+                    solved[n][k] = False
+                else:
+                    print(f"Solved {n} , {k} with {self.args.step_2_budget-remaining} expansions")
+                    solved[n][k] = True
+
+
 def debug_graph_inference(problem="AT"):
     from features import GAEEmbeddings
     import sys
@@ -112,10 +165,13 @@ def debug_graph_inference(problem="AT"):
         if i==15: breakpoint()
     breakpoint()
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
+    args = parse_args()
+    breakpoint()
+    #selection_debug(args)
     #debug_graph_inference()
-    problems = ["AT","DP","TA"]
+    problems = ["AT","CM","TL"]
     for problem in problems:
-        exp = RLTrainingExperiment(parse_args(), problem, (2,2))
+        exp = RLTrainingExperiment(args, problem, (2,2))
         exp.run()

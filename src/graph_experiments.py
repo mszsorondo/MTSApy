@@ -6,24 +6,6 @@ from torch_geometric.datasets import Planetoid
 
 
 
-TRAINABLE_FEATURES = [AutoencoderEmbeddings]
-class TrainableFeatureExtractor(FeatureExtractor):
-    def __init__(self, composition, enabled_features_dict = None, feature_classes = LEARNING_SYNTHESIS_BENCHMARK_FEATURES + TRAINABLE_FEATURES):
-        super().__init__(composition,enabled_features_dict)
-        self._trainable_features = [feature_cls for feature_cls in  self._feature_classes if hasattr(feature_cls, "train")]
-
-    def train(self, feature : Feature):
-        assert(feature in self._trainable_features)
-        feature.train(self.composition,self)
-
-
-    """
-    class DynamicEdgeSampler:
-    Motivation:
-    Sparse matrices with large number of nodes can be a problem when generating a negative edge index.
-    Explicit generation and storage of this indices is very costly in terms of memory and time.
-
-    """
 class NodePairSplitter:
     def __init__(self, data, split_labels=True, add_negative_train_samples=True, val_prop = 0.05,test_prop = 0.1, proportional=False):
         Warning("Sending split tensors to DEVICE may be convenient if using accelerators (TODO).")
@@ -66,19 +48,20 @@ def train_vgae_official(file_name = "vgae.pt"):
     import train_vgae
     import dgl
     from torch_geometric.utils import to_dgl
-    for problem in ["AT", "DP","TA", "BW", "CM","TL"]:
+    for problem in ["BW", "CM","TL","DP","AT","TA"]:
         d = CompositionGraph(problem, 2, 2)
         d.start_composition()
         d.full_composition()
 
-        da = FeatureExtractor(d, ENABLED_PYTHON_FEATURES, feature_classes=ENABLED_PYTHON_FEATURES.keys())
+
+        da = FeatureExtractor(d, list(ENABLED_PYTHON_FEATURES.keys()))
 
         data, device = da.composition_to_nx()
 
         dgl_data = to_dgl(data)
         dgl_data.problem = problem
         train_vgae.dgl_main(dgl_data) #TODO add parameters: graph, epochs, etc etc
-        Warning("I'm not so sure the parameters are correctly loaded or if the parameters are from the best model (watch out running mean and variance etc)")
+
 
 
 def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epochs = 5000, debug_graph = None):
@@ -134,6 +117,7 @@ def train_gae_on_full_graph(self : FeatureExtractor, to_undirected = True, epoch
 def composition_to_nx(self, debug_graph=None, to_undirected=True, selected_transitions_to_inspect = []):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(len(self.composition.nodes()), len(self.composition.edges()))
+
     edge_features = self.non_frontier_feature_vectors()
     self.set_static_node_features()
     CG = self.composition
