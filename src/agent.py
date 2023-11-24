@@ -131,7 +131,7 @@ class DQNAgent:
 
         composition = self.current_training_environment.contexts[0].composition
         comp_info = composition.info()
-        writer = SummaryWriter(rf".runs/gae_agent_trains/{str((comp_info))}_at_{str(datetime.datetime.now())}", \
+        writer = SummaryWriter(rf".runs/testing_torch_save_and_early_stopping_with_gae/{str((comp_info))}_at_{str(datetime.datetime.now())}", \
                                filename_suffix=f"{str((comp_info['problem'], comp_info['n'], comp_info['k']))}_at_{str(datetime.datetime.now())}")
         writer.add_text("training data", f"{str(composition)}")
 
@@ -142,7 +142,7 @@ class DQNAgent:
 
         current_reward, reward_list, episode_number = 0, [], 1
         obs = self.frontier_feature_vectors_as_batch() if (last_obs is None) else last_obs
-        while(not session.finished()):
+        while(not session.finished(self.training_steps)):
             a = self.get_action(obs, self.epsilon)
             session.last_steps.append(obs[a])
             obs2, reward, done, step_info = self.current_training_environment.step(a)
@@ -334,12 +334,12 @@ class TrainingSession:
               agent.training_steps)
         agent.save_idx += 1
 
-    def finished(self):
-        cond1 = self.max_steps>self.steps and not self.early_stopping
-        cond2 = self.n_agents_budget>0
+    def finished(self, training_steps):
+        cond1 = self.max_steps<training_steps and not self.early_stopping
+        cond2 = self.n_agents_budget==0
         cond3 = self.max_eps is not None and self.eps>=self.max_eps
-        if(self.max_steps is not None and self.training_steps > self.max_steps
-                and (self.training_steps - self.last_best) / self.training_steps > 0.33):
+        if(self.max_steps is not None and training_steps > self.max_steps
+                and (training_steps - self.last_best) / training_steps > 0.33):
             self.converged=True
         cond4 = self.early_stopping and self.converged
         return cond1 or cond2 or cond3 or cond4

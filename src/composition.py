@@ -183,12 +183,27 @@ class TrainingCompositionGraph(CompositionGraph):
         self.next_node_index = 1
         self.composition_int_identifier = bidict()
 
+
     def start_composition(self, mtsa_version_path='mtsa.jar', no_tau=True):
         super().start_composition(mtsa_version_path,no_tau)
+        self._fast_no_indices_alphabet_dict = dict()
+        self._alphabet = self.get_2_2_alphabet()
+        self._alphabet.sort()
+        self._no_indices_alphabet = list(set([util_remove_indices(str(e)) for e in self._alphabet]))
+        self._no_indices_alphabet.sort()
+
+        if no_tau: self._no_indices_alphabet.remove("tau")
+        for i in range(len(self._no_indices_alphabet)): self._fast_no_indices_alphabet_dict[
+            self._no_indices_alphabet[i]] = i
+        self._fast_no_indices_alphabet_dict = bidict(self._fast_no_indices_alphabet_dict)
         self.composition_int_identifier[self._initial_state] = 0
         self.inference_representation = dgl.graph(([], []))
         self.inference_representation.add_nodes(1)
         return self
+
+    def get_2_2_alphabet(self):
+        transient_tcg = CompositionGraph(self._problem,2,2).start_composition()
+        return [i for i in transient_tcg._javaEnv.dcs.alphabet.actions]
     def expand(self, idx):
         assert(not self._javaEnv.isFinished()), "Invalid expansion, composition is already solved"
         assert (idx<self.getFrontierSize() and idx>=0), "Invalid index"

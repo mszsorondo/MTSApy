@@ -8,10 +8,15 @@ from agent import *
 from agent import TrainingSession
 from environment import EnvironmentRefactored
 from features import *
-def selection_debug(args):
-    exp = RLTestingExperiment(args, "/home/marco/Desktop/MTSApy/experiments/test/AT/[2, 2]/", "AT")
+
+def selection_phase(args, agents_path, problem = "AT"):
+
+    exp = RLTestingExperiment(args, f"{agents_path}/{problem}/[2, 2]/", problem)
     instances = [(i,k) for i in range(1,16) for k in range(1,16)]
-    exp.run(instances)
+    exp.run(instances, logs_path=rf".runs/testing_torch_save_and_early_stopping_with_gae/{problem}")
+
+def best_agent_testing_phase(args, agent_path, problem = "AT"):
+    raise NotImplementedError
 class Experiment:
     def __init__(self, args : argparse.Namespace, problem : str):
         self.args = args
@@ -31,7 +36,6 @@ class TrainingExperiment(Experiment):
 class RLTrainingExperiment(TrainingExperiment):
     def __init__(self, args : argparse.Namespace, problem : str, context : tuple[int,int], ):
         super().__init__(args, problem, context)
-        breakpoint()
         self.env = Environment([FeatureExtractor(TrainingCompositionGraph(p, n, k).start_composition(), global_feature_classes=[GAEEmbeddings(problem=p)]) for p, n, k in self.training_contexts])
         self.agent = self.init_agent()
         self.args = args
@@ -103,42 +107,62 @@ class RLTestingExperiment():
         self.agents_path = agents_path
         self.problem = problem
 
-    def run(self, instances):
+    def run(self, instances, logs_path):
         #agent_idxs = np.random.randint(0,min(100,len(??)))
 
-        agent_paths = [self.agents_path +"/"+ f for f in get_filenames_in_path(self.agents_path) if ".onnx" in f]
+        agent_paths = [self.agents_path +"/"+ f for f in get_filenames_in_path(self.agents_path) if ".pt" in f]
         agent_paths = sorted(random.sample(agent_paths,min(100,len(agent_paths))))
+        solved_by_agent = {path:0 for path in agent_paths}
         n = max(instances)[0]
         solved = [[False for _ in range(n+1)] for _ in range(n+1)]
-
-        for agent_path in agent_paths:
+        path_to_folder = rf"{logs_path}/{str((self.problem))}_selection_at_{str(datetime.datetime.now())}"
+        writer = SummaryWriter(
+            path_to_folder, \
+            filename_suffix=f"{self.problem}_at_{str(datetime.datetime.now())}")
+        writer.add_text("selection phase data", f"{str(self.problem)}")
+        best_agent_path, best_solved = None,0
+        #TODO correlation between expanded transitions at a benchmark subset and total solved instances
+        for i,agent_path in enumerate(agent_paths):
             for instance in instances:
                 n,k = instance[0], instance[1]
                 if not ((n==1 or solved[n-1][k]) and (k==1 or solved[n][k-1])):
                     continue
                 tcg = TrainingCompositionGraph(self.problem, instance[0], instance[1])
-                breakpoint()
+
                 env = Environment([FeatureExtractor(tcg.start_composition(),
                                    global_feature_classes = [GAEEmbeddings(problem=self.problem)])])
+
+
                 nfeatures = env.contexts[0].get_transition_features_size()  # TODO refactor, hardcoded
-                breakpoint()
-                agent = DQNAgent(self.args, verbose=False,
-                                 nfeatures=nfeatures)
-                agent.nn_model = torch.load(agent_path)
-                breakpoint()
-                net = NeuralNetwork(nfeatures, nnsize=[20])
-                net.load_state_dict()
-                default_network(self.args,nfeatures,net=net)
+
+                agent = DQNAgent(self.args, verbose=False,nfeatures=nfeatures)
+                agent.nn_model = torch.load(agent_path,)
+                agent.set_feature_extractor(env.contexts[0].composition)
+                agent.set_training_environment(env)
                 remaining = self.args.step_2_budget
 
-                while(remaining):
-
+                while(remaining>0 and not tcg._javaEnv.isFinished()):
+                    obs = agent.frontier_feature_vectors_as_batch()
+                    a = agent.get_action(obs, 0)
+                    tcg.expand(a)
                     remaining-=1
                 if (remaining==0):
                     solved[n][k] = False
+                    print(f"Failed {n} , {k} with {self.args.step_2_budget} total expansions")
                 else:
-                    print(f"Solved {n} , {k} with {self.args.step_2_budget-remaining} expansions")
+                    print(f"Agent {i} solved {self.problem} at {n} , {k} with {self.args.step_2_budget-remaining} expansions")
                     solved[n][k] = True
+                    solved_by_agent[agent_path]+=1
+            writer.add_scalar("Solved Instances ",solved_by_agent[agent_path], i)
+            if solved_by_agent[agent_path]>best_solved:
+                best_solved=solved_by_agent[agent_path]
+                best_agent_path = agent_path
+            print(f"{i}-th agent solved {solved_by_agent[agent_path]} instances")
+        with open(f"{path_to_folder}/best_agent_info.txt","w") as f:
+            f.write(f"{best_agent_path}\n")
+            f.write(str(best_solved))
+        return best_agent_path, best_solved
+
 
 
 def debug_graph_inference(problem="AT"):
@@ -167,11 +191,14 @@ def debug_graph_inference(problem="AT"):
 
 
 if __name__ == "__main__":
+
     args = parse_args()
-    breakpoint()
-    #selection_debug(args)
-    #debug_graph_inference()
-    problems = ["AT","CM","TL"]
+    problems = ["AT", "BW", "CM", "DP", "TA", "TL"]
     for problem in problems:
+        selection_phase(args, agents_path="/home/marco/Desktop/MTSApy/experiments/testing_torch_save_and_early_stopping_with_gae", problem=problem)
+
+    #debug_graph_inference()
+
+    """for problem in problems:
         exp = RLTrainingExperiment(args, problem, (2,2))
-        exp.run()
+        exp.run()"""
