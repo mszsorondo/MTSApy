@@ -5,7 +5,7 @@ import warnings
 import dgl
 import networkx as nx
 import torch
-
+from contextlib import redirect_stdout
 from util import remove_indices as util_remove_indices
 from util import *
 
@@ -25,6 +25,7 @@ class CompositionGraph(nx.MultiDiGraph):
         self._number_of_goals = 0
         self._expansion_order = []
         self._fast_no_indices_alphabet_dict = dict()
+        self._newest_compostate = self._initial_state
         print("Warning: underlying Java code runs unused feature computations and buffers")
 
     def __str__(self):
@@ -69,6 +70,7 @@ class CompositionGraph(nx.MultiDiGraph):
             i+=1 ; print(i)
             nonfront = self.getNonFrontier()
             lastexp = self.getLastExpanded()
+
             assert lastexp.state == nonfront[len(nonfront)-1].state
             assert lastexp.action == nonfront[len(nonfront) - 1].action
             self._javaEnv.set_compostate_as_none(lastexp.state)
@@ -111,8 +113,8 @@ class CompositionGraph(nx.MultiDiGraph):
 
 
     def expand(self, idx):
-        assert(not self._javaEnv.isFinished()), "Invalid expansion, composition is already solved"
-        assert (idx<self.getFrontierSize() and idx>=0), "Invalid index"
+        #assert(not self._javaEnv.isFinished()), "Invalid expansion, composition is already solved"
+        #assert (idx<self.getFrontierSize() and idx>=0), "Invalid index"
 
         if self.getFrontierSize()>0:
             self._javaEnv.expandAction(idx) #TODO check this is the same index as in the python frontier list
@@ -120,12 +122,13 @@ class CompositionGraph(nx.MultiDiGraph):
 
         new_state_action = self.getLastExpanded()
         controllability, label = self.getLastExpanded().action.isControllable(), self.getLastExpanded().action.toString()
-        self.add_node(self.last_expansion_child_state())
+        self._newest_compostate = self.last_expansion_child_state()
+        self.add_node(self._newest_compostate)
         self.add_edge(new_state_action.state, self.last_expansion_child_state(), controllability=controllability, label=label, action_with_features = new_state_action)
         self._expansion_order.append(self.getLastExpanded())
     def expandNoSolution(self, idx):
-        assert(not self._javaEnv.isFinished()), "Invalid expansion, composition is already solved"
-        assert (idx<self.getFrontierSize() and idx>=0), "Invalid index"
+        #assert(not self._javaEnv.isFinished()), "Invalid expansion, composition is already solved"
+        #assert (idx<self.getFrontierSize() and idx>=0), "Invalid index"
 
         if self.getFrontierSize()>0:
             self._javaEnv.expandActionNoSolution(idx) #TODO check this is the same index as in the python frontier list
@@ -133,7 +136,8 @@ class CompositionGraph(nx.MultiDiGraph):
 
         new_state_action = self.getLastExpanded()
         controllability, label = self.getLastExpanded().action.isControllable(), self.getLastExpanded().action.toString()
-        self.add_node(self.last_expansion_child_state())
+        self._newest_compostate = self.last_expansion_child_state()
+        self.add_node(self._newest_compostate)
         self.add_edge(new_state_action.state, self.last_expansion_child_state(), controllability=controllability, label=label, action_with_features = new_state_action)
         self._expansion_order.append(self.getLastExpanded())
     def last_expansion_child_state(self):
@@ -202,7 +206,8 @@ class TrainingCompositionGraph(CompositionGraph):
         return self
 
     def get_2_2_alphabet(self):
-        transient_tcg = CompositionGraph(self._problem,2,2).start_composition()
+        with redirect_stdout(None):
+            transient_tcg = CompositionGraph(self._problem,2,2).start_composition()
         return [i for i in transient_tcg._javaEnv.dcs.alphabet.actions]
     def expand(self, idx):
         assert(not self._javaEnv.isFinished()), "Invalid expansion, composition is already solved"

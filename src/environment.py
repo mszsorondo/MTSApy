@@ -74,6 +74,7 @@ if __name__=="__main__":
         ChildNodeState: False,
         UncontrollableNeighborhood: False,
         ExploredStateChild: False,
+        ExploredStateChildFromJava : False,
         IsLastExpanded: False
     }
     for i in range(1,len(ENABLED_PYTHON_FEATURES.keys())):

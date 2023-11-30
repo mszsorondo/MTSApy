@@ -78,7 +78,7 @@ class DQNAgent:
 
 
     def set_feature_extractor(self, composition : CompositionGraph):
-        self.feature_extractor = FeatureExtractor(composition, global_feature_classes=[GAEEmbeddings(problem=composition._problem)])
+        self.feature_extractor = FeatureExtractor(composition, global_feature_classes=[GAEEmbeddings(problem=composition._problem,)])
 
     def _get_experience_from_random_policy(self, env : Environment, total_steps, nstep=1):
         """ TODO it is not ok for an agent to restart and execute the steps of the environment, refactor this
@@ -146,6 +146,7 @@ class DQNAgent:
             a = self.get_action(obs, self.epsilon)
             session.last_steps.append(obs[a])
             obs2, reward, done, step_info = self.current_training_environment.step(a)
+            print("action ",a)
             current_reward -= 1
             #TODO refactor with DQN class and DQNExperienceReplay class or decorator with ex                                                                        perience replay or similar
             #also modifying session.last_steps this way looks horrible

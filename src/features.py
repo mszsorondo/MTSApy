@@ -43,7 +43,7 @@ class TransitionFeature(Feature):
         raise NotImplementedError
     @classmethod
     def _set_transition_type_bit(cls,feature_vec_slice, transition, _fast_no_indices_alphabet_dict):
-        no_idx_label = util_remove_indices(transition.toString())
+        no_idx_label = util_remove_indices(str(transition.toString()))
         feature_vec_slice_pos = _fast_no_indices_alphabet_dict[no_idx_label]
         feature_vec_slice[feature_vec_slice_pos] = 1
 
@@ -84,7 +84,8 @@ class RandomOneHotNodeFeature(NodeFeature):
 
 class GAEEmbeddings(GlobalFeature):
     def __init__(self, gae : nn.Module = None, problem = None):
-        if gae is not None: self.gae = gae
+        if gae is not None:
+            self.gae = gae
         else:
             import sys
             sys.path.append("/home/marco/Desktop/dgl/dgl/examples/pytorch/vgae")
@@ -97,13 +98,52 @@ class GAEEmbeddings(GlobalFeature):
 
             graphnet = mdl.VGAEModel(in_dim, hidden1, hidden2)
             graphnet.load_state_dict(torch.load(f"/home/marco/Desktop/MTSApy/src/features/VGAE_{problem}.pth"))
-
             graphnet.eval()
             self.gae = graphnet
-        self.memory = None
+        self.memory, self.nodewise_feature_dict = None,None
         self.size = hidden2
 
     def compute(self, state: TrainingCompositionGraph):
+        assert state.__class__ == TrainingCompositionGraph
+        if self.nodewise_feature_dict is None: self.nodewise_feature_dict = OrderedDict()
+        awf_last_expanded = state.getLastExpanded()
+        newest = None
+        if awf_last_expanded is None:
+            node_list = state.nodes(data=True)
+        elif awf_last_expanded.child is not None:
+            node_list = [(awf_last_expanded.state,state.nodes[awf_last_expanded.state]),(awf_last_expanded.child,state.nodes[awf_last_expanded.child])]
+        else:
+            newest = state.last_expansion_child_state()
+            node_list = [(awf_last_expanded.state,state.nodes[awf_last_expanded.state]), (newest,state.nodes[newest])]
+        self.set_static_node_features(state,self.nodewise_feature_dict,node_list=node_list)
+        Warning("add only updated features to DGL dict and perform forward pass")
+
+        if awf_last_expanded is None:
+            state.inference_representation.ndata["feat"] = torch.tensor([f for f in self.nodewise_feature_dict.values()])
+            feats = state.inference_representation.ndata["feat"]
+
+        elif awf_last_expanded.child is not None:
+            feats = state.inference_representation.ndata["feat"]  # TODO set device etc
+            child_idx = state.composition_int_identifier[awf_last_expanded.child]
+            source_idx = state.composition_int_identifier[awf_last_expanded.state]
+            feats[child_idx] = torch.tensor(self.nodewise_feature_dict[child_idx])
+            feats[source_idx] = torch.tensor(self.nodewise_feature_dict[source_idx])
+        else:
+            feats = state.inference_representation.ndata["feat"]  # TODO set device etc
+            child_idx = state.composition_int_identifier[newest]
+            source_idx = state.composition_int_identifier[awf_last_expanded.state]
+            feats[source_idx] = torch.tensor(self.nodewise_feature_dict[source_idx])
+            feats[child_idx] = torch.tensor(self.nodewise_feature_dict[child_idx])
+            assert child_idx == feats.shape[0]-1
+
+        with torch.no_grad():
+            embeddings = self.gae.encoder(state.inference_representation, feats)
+
+        self.memory = embeddings
+
+        return embeddings
+
+    def compute_old(self, state: TrainingCompositionGraph):
         assert state.__class__ == TrainingCompositionGraph
         nodewise_feature_dict = OrderedDict()
         self.set_static_node_features(state,nodewise_feature_dict)
@@ -112,13 +152,16 @@ class GAEEmbeddings(GlobalFeature):
         state.inference_representation.ndata["feat"] = torch.tensor([f for f in nodewise_feature_dict.values()])
         feats = state.inference_representation.ndata.pop("feat") #TODO set device etc
         with torch.no_grad():
+            breakpoint()
             embeddings = self.gae.encoder(state.inference_representation, feats)
         self.memory = embeddings
+
         return embeddings
 
-    def set_static_node_features(self, state: TrainingCompositionGraph, res):
+    def set_static_node_features(self, state: TrainingCompositionGraph, res, node_list = None):
         #FIXME refactor this
-        for node,node_dict in state.nodes(data=True):
+        node_list = state.nodes(data=True) if node_list is None else node_list
+        for node,node_dict in node_list:
             in_label_ohe = LabelsOHE.compute(state, node, dir="in")
             out_label_ohe = LabelsOHE.compute(state, node, dir="out")
             marked =  MarkedState.compute(state, node)
@@ -154,6 +197,12 @@ class StateLabel(TransitionFeature):
         arriving_to_s = transition.state.getParents()
         for trans in arriving_to_s: cls._set_transition_type_bit(feature_vec_slice, trans.getFirst(), state._fast_no_indices_alphabet_dict)
         return feature_vec_slice
+
+class StateLabelFromJava(TransitionFeature):
+    @classmethod
+    def compute(cls, state : CompositionGraph, transition):
+        res = list(state._javaEnv.featureMaker.slfComputeSlice(transition))
+        return [float(e) for e in res]
 class Controllable(TransitionFeature):
     @classmethod
     def compute(cls, state : CompositionGraph, transition):
@@ -174,38 +223,42 @@ class MarkedState(NodeFeature):
 class CurrentPhase(TransitionFeature):
     @classmethod
     def compute(cls, state: CompositionGraph, transition):
-        return [float(state._javaEnv.dcs.heuristic.goals_found > 0),
-                float(state._javaEnv.dcs.heuristic.marked_states_found > 0),
-                float(state._javaEnv.dcs.heuristic.closed_potentially_winning_loops > 0)]
+        return [float(int(state._javaEnv.dcs.heuristic.goals_found) > 0),
+                float(int(state._javaEnv.dcs.heuristic.marked_states_found) > 0),
+                float(int(state._javaEnv.dcs.heuristic.closed_potentially_winning_loops) > 0)]
 
 class ChildNodeState(TransitionFeature):
     @classmethod
     def compute(cls, state: CompositionGraph, transition):
         res = [0, 0, 0]
         if (transition.child is not None):
-            res = [float(transition.child.status.toString() == "GOAL"),
-                   float(transition.child.status.toString() == "ERROR"),
-                   float(transition.child.status.toString() == "NONE")]
+            res = [float(str(transition.child.status.toString()) == "GOAL"),
+                   float(str(transition.child.status.toString()) == "ERROR"),
+                   float(str(transition.child.status.toString()) == "NONE")]
         return res
 
 class UncontrollableNeighborhood(TransitionFeature):
     @classmethod
     def compute(cls, state: CompositionGraph, transition):
-        return [float(transition.state.uncontrollableUnexploredTransitions > 0),
-                float(transition.state.uncontrollableTransitions > 0),
-                float(transition.child is None or transition.child.uncontrollableUnexploredTransitions > 0),
-                float(transition.child is None or transition.child.uncontrollableTransitions > 0)
+        return [float(int(transition.state.uncontrollableUnexploredTransitions) > 0),
+                float(int(transition.state.uncontrollableTransitions) > 0),
+                float(transition.child is None or int(transition.child.uncontrollableUnexploredTransitions) > 0),
+                float(transition.child is None or int(transition.child.uncontrollableTransitions) > 0)
                 ]
 
 
 class ExploredStateChild(TransitionFeature):
     @classmethod
     def compute(cls, state: CompositionGraph, transition):
-        res = [float(transition.state.unexploredTransitions) != float(len(transition.state.getTransitions())),
-                float(transition.child is not None and float(transition.child.unexploredTransitions) != float(len(transition.child.getTransitions())))]
+        res = [float(transition.state.unexploredTransitions) != float(len(list(transition.state.getTransitions()))),
+                float(transition.child is not None and float(transition.child.unexploredTransitions) != float(len(list(transition.child.getTransitions()))))]
 
         return [float(i) for i in res]
-
+class ExploredStateChildFromJava(TransitionFeature):
+    @classmethod
+    def compute(cls, state: CompositionGraph, transition):
+        res = list(state._javaEnv.featureMaker.exploredStateChildComputeSlice(transition))
+        return [float(e) for e in res]
 class IsLastExpanded(TransitionFeature):
     @classmethod
     def compute(cls, state: CompositionGraph, transition):
@@ -214,7 +267,7 @@ class IsLastExpanded(TransitionFeature):
 class ChildDeadlock(TransitionFeature):
     @classmethod
     def compute(cls, state : CompositionGraph, transition):
-        return [float(transition.child is not None and len(transition.child.getTransitions()) == 0)]
+        return [float(transition.child is not None and len(list(transition.child.getTransitions())) == 0)]
 
 
 class GCNEncoder(torch.nn.Module):
@@ -261,7 +314,7 @@ def train(model, optimizer, features, train_pos_edge_label_index, train_neg_edge
 def test(model, test_pos_edge_index, test_neg_edge_index, features,train_pos_edge_label_index, train_neg_edge_label_index):
     model.eval()
     with torch.no_grad():
-        #breakpoint()
+            #breakpoint()
         z = model.encode(features, train_pos_edge_label_index)
     return model.test(z, train_pos_edge_label_index, train_neg_edge_label_index)
 

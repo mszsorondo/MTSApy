@@ -1,22 +1,28 @@
 import random
+import time
 
 import numpy as np
 import torch
-
+import sys
 from extractor import FeatureExtractor
 from agent import *
 from agent import TrainingSession
 from environment import EnvironmentRefactored
 from features import *
+from contextlib import redirect_stdout
+
 
 def selection_phase(args, agents_path, problem = "AT"):
 
     exp = RLTestingExperiment(args, f"{agents_path}/{problem}/[2, 2]/", problem)
     instances = [(i,k) for i in range(1,16) for k in range(1,16)]
-    exp.run(instances, logs_path=rf".runs/testing_torch_save_and_early_stopping_with_gae/{problem}")
+    exp.run(instances, logs_path=rf".runs/{exp_name}/{problem}")
 
-def best_agent_testing_phase(args, agent_path, problem = "AT"):
-    raise NotImplementedError
+def best_agent_testing_phase(args, agent_path, problem = "AT", agents_path = None):
+    assert agents_path is not None
+    exp = RLBestAgentExperiment(args, agent_path, problem)
+    instances = [(i, k) for i in range(1, 16) for k in range(1, 16)]
+    exp.run(instances, logs_path=rf".runs/{exp_name}/{problem}",)
 class Experiment:
     def __init__(self, args : argparse.Namespace, problem : str):
         self.args = args
@@ -100,6 +106,62 @@ class RLTrainingExperiment(TrainingExperiment):
     def __str__(self):
         raise NotImplementedError
 
+class RLBestAgentExperiment():
+    def __init__(self, args: argparse.Namespace, agent_path, problem):
+        self.args = args
+        self.agent_path = agent_path
+        self.problem = problem
+
+
+    def run(self, instances, logs_path):
+        #agent_idxs = np.random.randint(0,min(100,len(??)))
+
+        n = max(instances)[0]
+        solved = [[False for _ in range(n+1)] for _ in range(n+1)]
+        path_to_folder = rf"{logs_path}/{str((self.problem))}_best_agent_at_{str(datetime.datetime.now())}"
+
+        for instance in instances:
+            n,k = instance[0], instance[1]
+            if not ((n==1 or solved[n-1][k]) and (k==1 or solved[n][k-1])):
+                continue
+            with redirect_stdout(None):
+                tcg = TrainingCompositionGraph(self.problem, instance[0], instance[1])
+
+            env = Environment([FeatureExtractor(tcg.start_composition(),
+                               global_feature_classes = [GAEEmbeddings(problem=self.problem)])])
+
+
+            nfeatures = env.contexts[0].get_transition_features_size()  # TODO refactor, hardcoded
+
+            agent = DQNAgent(self.args, verbose=False,nfeatures=nfeatures)
+
+            with redirect_stdout(None):
+                agent.nn_model = torch.load(self.agent_path)
+            agent.set_feature_extractor(env.contexts[0].composition)
+            agent.set_training_environment(env)
+            remaining = self.args.step_3_budget
+
+            while(remaining>0 and not tcg._javaEnv.isFinished()):
+                obs = agent.frontier_feature_vectors_as_batch()
+                a = agent.get_action(obs, 0)
+                tcg.expand(a)
+                remaining-=1
+            if (remaining==0):
+                solved[n][k] = False
+                print(f"Failed {n} , {k} with {self.args.step_3_budget} total expansions")
+            else:
+                print(f"Best agent solved {self.problem} at {n} , {k} with {self.args.step_3_budget-remaining} expansions")
+                solved[n][k] = True
+
+            print(np.array(solved).sum(), " instances solved by agent (so far)")
+        total_solved = np.array(solved).sum()
+        print(f"best agent solved {total_solved} instances")
+        with open(f"{path_to_folder}/best_agent_info_15000.txt","w") as f:
+            f.write(f"{total_solved}\n")
+
+        return total_solved
+
+
 
 class RLTestingExperiment():
     def __init__(self,args : argparse.Namespace, agents_path, problem):
@@ -107,27 +169,34 @@ class RLTestingExperiment():
         self.agents_path = agents_path
         self.problem = problem
 
-    def run(self, instances, logs_path):
+    def gae_importance_throughout_training(self):
+        raise NotImplementedError
+    def run(self, instances, logs_path, prev_testing_info_path = None):
         #agent_idxs = np.random.randint(0,min(100,len(??)))
-
         agent_paths = [self.agents_path +"/"+ f for f in get_filenames_in_path(self.agents_path) if ".pt" in f]
         agent_paths = sorted(random.sample(agent_paths,min(100,len(agent_paths))))
         solved_by_agent = {path:0 for path in agent_paths}
         n = max(instances)[0]
-        solved = [[False for _ in range(n+1)] for _ in range(n+1)]
         path_to_folder = rf"{logs_path}/{str((self.problem))}_selection_at_{str(datetime.datetime.now())}"
         writer = SummaryWriter(
             path_to_folder, \
             filename_suffix=f"{self.problem}_at_{str(datetime.datetime.now())}")
         writer.add_text("selection phase data", f"{str(self.problem)}")
         best_agent_path, best_solved = None,0
+        tested_by_agent = {agent_path : [] for agent_path in agent_paths}if prev_testing_info_path is None else pickle.load(prev_testing_info_path)
+
         #TODO correlation between expanded transitions at a benchmark subset and total solved instances
         for i,agent_path in enumerate(agent_paths):
+            solved = [[False for _ in range(n + 1)] for _ in range(n + 1)]
             for instance in instances:
                 n,k = instance[0], instance[1]
                 if not ((n==1 or solved[n-1][k]) and (k==1 or solved[n][k-1])):
                     continue
-                tcg = TrainingCompositionGraph(self.problem, instance[0], instance[1])
+
+                if (problem,n,k) in tested_by_agent[agent_path]: continue
+                tested_by_agent[agent_path].append((problem,2,2))
+                with redirect_stdout(None):
+                    tcg = TrainingCompositionGraph(self.problem, instance[0], instance[1])
 
                 env = Environment([FeatureExtractor(tcg.start_composition(),
                                    global_feature_classes = [GAEEmbeddings(problem=self.problem)])])
@@ -135,13 +204,17 @@ class RLTestingExperiment():
 
                 nfeatures = env.contexts[0].get_transition_features_size()  # TODO refactor, hardcoded
 
-                agent = DQNAgent(self.args, verbose=False,nfeatures=nfeatures)
-                agent.nn_model = torch.load(agent_path,)
+                with redirect_stdout(None):
+                    agent = DQNAgent(self.args, verbose=False, nfeatures=nfeatures)
+                    agent.nn_model = torch.load(agent_path,)
+
+
+
                 agent.set_feature_extractor(env.contexts[0].composition)
                 agent.set_training_environment(env)
                 remaining = self.args.step_2_budget
 
-                while(remaining>0 and not tcg._javaEnv.isFinished()):
+                while(remaining>0 and not bool(tcg._javaEnv.isFinished())):
                     obs = agent.frontier_feature_vectors_as_batch()
                     a = agent.get_action(obs, 0)
                     tcg.expand(a)
@@ -149,18 +222,25 @@ class RLTestingExperiment():
                 if (remaining==0):
                     solved[n][k] = False
                     print(f"Failed {n} , {k} with {self.args.step_2_budget} total expansions")
+                    time.sleep(0.5)
                 else:
                     print(f"Agent {i} solved {self.problem} at {n} , {k} with {self.args.step_2_budget-remaining} expansions")
                     solved[n][k] = True
                     solved_by_agent[agent_path]+=1
+                    time.sleep(0.1)
+                with open(f"{logs_path}/{problem}_selection_info.pkl", "wb") as f:
+                    pickle.dump(tested_by_agent, f)
             writer.add_scalar("Solved Instances ",solved_by_agent[agent_path], i)
             if solved_by_agent[agent_path]>best_solved:
                 best_solved=solved_by_agent[agent_path]
                 best_agent_path = agent_path
+
             print(f"{i}-th agent solved {solved_by_agent[agent_path]} instances")
+
         with open(f"{path_to_folder}/best_agent_info.txt","w") as f:
             f.write(f"{best_agent_path}\n")
             f.write(str(best_solved))
+
         return best_agent_path, best_solved
 
 
@@ -189,16 +269,35 @@ def debug_graph_inference(problem="AT"):
         if i==15: breakpoint()
     breakpoint()
 
+def gae_feature_importance_comparison(net : nn.Module):
+    #TODO a plot of the importance throughout agents for each problem
+    fixed_feature_importance = sum([net.layers[0].weight[i][:-16].abs().sum()/len(net.layers[0].weight[i][:-16]) for i in range(len(net.layers[0].weight))])
+    gae_embedding_importance = sum([net.layers[0].weight[i][-16:].abs().sum()/len(net.layers[0].weight[i][-16:]) for i in range(len(net.layers[0].weight))])
+    return fixed_feature_importance,gae_embedding_importance
 
+
+exp_name = "profile_testing_torch_save_and_early_stopping_with_gae"
 if __name__ == "__main__":
 
+
     args = parse_args()
-    problems = ["AT", "BW", "CM", "DP", "TA", "TL"]
+    problems = ["BW", "CM", "DP", "TA", "TL","AT"]
+    best_agent_paths = []
+    num_solved_problems = []
+    gae_exp_path = f"/home/marco/Desktop/MTSApy/experiments/testing_torch_save_and_early_stopping_with_gae/"
+
     for problem in problems:
-        selection_phase(args, agents_path="/home/marco/Desktop/MTSApy/experiments/testing_torch_save_and_early_stopping_with_gae", problem=problem)
-
-    #debug_graph_inference()
-
-    """for problem in problems:
+        print(f"Starting selection experiment for {problem}")
+        path, num_solved = selection_phase(args, agents_path=gae_exp_path, problem=problem)
+        best_agent_paths.append(path)
+        num_solved_problems.append(num_solved)
+        print(f"Starting best agent test for {problem} with {path}")
+        best_agent_testing_phase(args, path, problem=problem, agents_path=gae_exp_path)
+    print(num_solved_problems , problems)
+"""    for path,problem in zip(best_agent_paths,problems):
+        best_agent_testing_phase(args, path, problem=problem, agents_path=gae_exp_path)
+        for problem in problems:
         exp = RLTrainingExperiment(args, problem, (2,2))
-        exp.run()"""
+        exp.run()
+        """
+

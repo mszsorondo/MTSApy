@@ -5,8 +5,8 @@ from torch_geometric.utils import from_networkx
 from util import remove_indices as util_remove_indices
 from features import *
 
-LEARNING_SYNTHESIS_BENCHMARK_FEATURES = [EventLabel, StateLabel, Controllable, MarkedSourceAndSinkStates, CurrentPhase,
-                                         ChildNodeState, UncontrollableNeighborhood, ExploredStateChild, IsLastExpanded, ChildDeadlock]
+LEARNING_SYNTHESIS_BENCHMARK_FEATURES = [EventLabel,StateLabelFromJava, Controllable, MarkedSourceAndSinkStates, CurrentPhase,
+                                         ChildNodeState, UncontrollableNeighborhood, ExploredStateChildFromJava, IsLastExpanded, ChildDeadlock]
 
 class FeatureExtractor:
     """class used to get Composition information, usable as hand-crafted features
@@ -48,7 +48,7 @@ class FeatureExtractor:
             res += feature.compute(state)
         return res
     def _set_transition_type_bit(self, feature_vec_slice, transition):
-        no_idx_label = self.remove_indices(transition.toString())
+        no_idx_label = self.remove_indices(str(transition.toString()))
         feature_vec_slice_pos = self._fast_no_indices_alphabet_dict[no_idx_label]
         feature_vec_slice[feature_vec_slice_pos] = 1
 
@@ -73,7 +73,6 @@ class FeatureExtractor:
         for trans in list(self.composition.getFrontier()):
             source_state_idx = self.composition.composition_int_identifier[trans.state]
             res.update({(trans.state,trans.action) : self.extract(trans, self.composition) + node_features[source_state_idx].tolist()})
-
         return res
     def frontier_feature_vectors_as_batch(self):
         return np.array(list(self.frontier_feature_vectors().values()), dtype=np.float32)

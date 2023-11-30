@@ -152,6 +152,7 @@ if __name__=="__main__":
         ChildNodeState: False,
         UncontrollableNeighborhood: False,
         ExploredStateChild: False,
+        ExploredStateChildFromJava : False,
         IsLastExpanded: False,
         RandomTransitionFeature : False,
         RandomOneHotTransitionFeature : False,

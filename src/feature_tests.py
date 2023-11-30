@@ -15,7 +15,7 @@ JAVA_METHOD_TO_PYTHON_METHOD = {
     "contextComputeSlice":CurrentPhase,
     "childStatusComputeSlice" : ChildNodeState,
     "uncontrollableComputeSlice" : UncontrollableNeighborhood,
-    "exploredComputeSlice" : ExploredStateChild,
+    "exploredComputeSlice" : ExploredStateChildFromJava,
     "justExploredComputeSlice" : IsLastExpanded,
     "childDeadlockComputeSlice": ChildDeadlock,
 }
